@@ -5,8 +5,8 @@ from discord.ext import commands
 from dotenv import load_dotenv
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')  
-guild_id = 1409781190545772614
-guild = discord.Object(id=1409781190545772614)
+GUILD_ID = os.getenv('SERVER_ID')
+guild = discord.Object(id=GUILD_ID)
 class Bot(commands.Bot):
     async def setup_hook(self)->None:
         await self.load_extension("cogs.musicplayer")
@@ -18,7 +18,7 @@ intents.voice_states = True
 bot = Bot(command_prefix='!',intents=intents)
 @bot.event
 async def on_ready()->None:
-    print(f'Logged in as {bot.user} on {bot.get_guild(guild_id)}')
+    print(f'Logged in as {bot.user} on {bot.get_guild(GUILD_ID)}')
     commands = await bot.tree.fetch_commands(guild=guild)
     names = [name.name for name in commands]
     print(f'{names}')
