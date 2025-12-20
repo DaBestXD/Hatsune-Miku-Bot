@@ -4,3 +4,5 @@
 *.HatsuneMikuENV
 *audio_files
 *.env
+*cogs/old_musicplayer.py
+*youtube_downloader.py
