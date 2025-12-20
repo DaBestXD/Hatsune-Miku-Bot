@@ -56,18 +56,22 @@ class MikuMusicCommands(commands.Cog):
     async def play(self, interaction:discord.Interaction,song_name:str)->None:
         await interaction.response.defer(thinking=True)
         await self.join(interaction)
+        if interaction.guild.me.voice is None:
+            return
         self.bot_vc = interaction.guild.voice_client
         self.text_channel = interaction.channel
         song_title,url = await get_Youtube_Info(song_name)
+        if song_title is None:
+            return await interaction.followup.send(f'```Invalid link```')
         self.song_sources_queue.append(url)
         self.song_names_list.append(song_title)
         if self.bot_vc.is_playing():
-            await interaction.followup.send(f'```Added {song_title} to the queue```')
+            await interaction.followup.send(f'Added [{song_title}]({url}) to the queue')
             return 
         if not self.bot_vc.is_playing():
             source = discord.FFmpegOpusAudio(source=await get_Audio_Source(url),**FFMPEG_OPTS)
         self.bot_vc.play(source,after=self.after)
-        await interaction.followup.send(f'```Now playing {song_title}!```')
+        await interaction.followup.send(f'Now playing [{song_title}]({url})!')
         return
     @app_commands.command(name='stop',description='Disconnects bot from voice channel')
     @app_commands.guilds(GUILD_ID)
@@ -82,7 +86,7 @@ class MikuMusicCommands(commands.Cog):
     @app_commands.guilds(GUILD_ID)
     async def skip(self,interaction:discord.Interaction)->None:
         if interaction.guild.me.voice is None:
-            return await interaction.response.send_message("```Not in a voice channel```")
+            return await interaction.response.send_message(">Not in a voice channel")
         self.loop = False
         await interaction.response.send_message(f"```Skipping {self.song_names_list[0]}```")
         interaction.guild.voice_client.stop()
@@ -122,7 +126,7 @@ class MikuMusicCommands(commands.Cog):
             return await interaction.followup.send(f"```Unable to find {song_name}```")
         self.song_sources_queue.insert(1,song_source)
         self.song_names_list.insert(1,song_title)
-        return await interaction.followup.send(f'```Playing {song_title} next```')
+        return await interaction.followup.send(f'Playing [{song_title}]({self.song_sources_queue[1]}) next')
     @app_commands.command(name='loop',description='Loop current song')
     @app_commands.guilds(GUILD_ID)
     async def loopSong(self,interaction:discord.Interaction):
@@ -133,6 +137,18 @@ class MikuMusicCommands(commands.Cog):
             return await interaction.response.send_message("```Looping current song```")
         self.loop = False
         return await interaction.response.send_message("```No longer looping current song```")
+    @app_commands.command(name='remove',description='Remove song from queue')
+    @app_commands.guilds(GUILD_ID)
+    async def removeFromQueue(self,interaction:discord.Interaction,index:int)->None:
+        try:
+            if index == 0:
+                raise IndexError
+            await interaction.response.send_message(f"```Removing {self.song_names_list[index]} from queue```")
+            self.song_names_list.pop(index)
+            self.song_sources_queue.pop(index)
+        except IndexError:
+            await interaction.response.send_message(f'```Not a valid number!```')
+        return
     @app_commands.command(name='die',description='Shuts down bot')
     @app_commands.guilds(GUILD_ID)
     async def die(self,interaction:discord.Interaction)->None|discord.InteractionCallbackResponse:
@@ -142,5 +158,6 @@ class MikuMusicCommands(commands.Cog):
             sys.exit()
             return
         return await interaction.response.send_message('```Not allowed```')
+    
 async def setup(bot:commands.Bot):
     await bot.add_cog(MikuMusicCommands(bot))

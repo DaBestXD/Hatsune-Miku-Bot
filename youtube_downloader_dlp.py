@@ -1,7 +1,7 @@
 from yt_dlp import YoutubeDL
 from pytubefix import Search, YouTube
 import validators
-async def get_Youtube_Info(url:str)->tuple:
+async def get_Youtube_Info(url:str)->tuple|None:
     query = Search(url)
     if not validators.url(url):
         text = query.results[0]
@@ -10,7 +10,11 @@ async def get_Youtube_Info(url:str)->tuple:
         print(url,title)
         return (title,url)
     yt = YouTube(url)
-    return (yt.title,url)
+    try:
+        return (str(yt.title),str(url))
+    except:
+        return (None,None)
+    
 async def get_Audio_Source(url:str)->str:
     ydl_opts =  {
         "format": "bestaudio/best",
@@ -18,7 +22,5 @@ async def get_Audio_Source(url:str)->str:
     }
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
-        return info['url']
+        return str(info['url'])
     return None
-
-
