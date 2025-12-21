@@ -6,7 +6,7 @@ import sys
 from dotenv import load_dotenv
 from discord import app_commands
 from discord.ext import commands
-from youtube_downloader_dlp import get_Youtube_Info, get_Audio_Source
+from youtube_downloader_dlp import get_Song_Info, get_Audio_Source
 load_dotenv()
 ID = os.getenv('SERVER_ID')
 GUILD_ID = discord.Object(id=ID)
@@ -60,7 +60,7 @@ class MikuMusicCommands(commands.Cog):
             return
         self.bot_vc = interaction.guild.voice_client
         self.text_channel = interaction.channel
-        song_title,url = await get_Youtube_Info(song_name)
+        song_title,url = await get_Song_Info(song_name)
         if song_title is None:
             return await interaction.followup.send(f'```Invalid link```')
         self.song_sources_queue.append(url)
@@ -79,6 +79,7 @@ class MikuMusicCommands(commands.Cog):
         if interaction.guild.me.voice is None:
             return await interaction.response.send_message("```Not in a voice channel```")
         await interaction.guild.voice_client.disconnect()
+        self.loop = False
         self.song_names_list = []
         self.song_sources_queue = []
         return await interaction.response.send_message("```Stopping playback...```") 
@@ -86,7 +87,8 @@ class MikuMusicCommands(commands.Cog):
     @app_commands.guilds(GUILD_ID)
     async def skip(self,interaction:discord.Interaction)->None:
         if interaction.guild.me.voice is None:
-            return await interaction.response.send_message(">Not in a voice channel")
+            await interaction.response.send_message("```Not in a voice channel```")
+            return
         self.loop = False
         await interaction.response.send_message(f"```Skipping {self.song_names_list[0]}```")
         interaction.guild.voice_client.stop()
@@ -121,7 +123,7 @@ class MikuMusicCommands(commands.Cog):
         if interaction.guild.me.voice is None:
             return await interaction.response.send_message("```Not in a voice channel```")
         await interaction.response.defer(thinking=True)
-        song_title,song_source = await get_Youtube_Info(song_name)
+        song_title,song_source = await get_Song_Info(song_name)
         if song_title is None:
             return await interaction.followup.send(f"```Unable to find {song_name}```")
         self.song_sources_queue.insert(1,song_source)
