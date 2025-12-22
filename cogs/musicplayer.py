@@ -70,7 +70,14 @@ class MikuMusicCommands(commands.Cog):
             return 
         if not self.bot_vc.is_playing():
             source = discord.FFmpegOpusAudio(source=await get_Audio_Source(url),**FFMPEG_OPTS)
-        self.bot_vc.play(source,after=self.after)
+        try:
+            if source == None:
+                raise Exception
+            self.bot_vc.play(source,after=self.after)
+        except Exception as e:
+            print(e)
+            await interaction.followup.send(f'``Something went wrong try again```')
+            return 
         await interaction.followup.send(f'Now playing [{song_title}]({url})!')
         return
     @app_commands.command(name='stop',description='Disconnects bot from voice channel')
@@ -131,7 +138,7 @@ class MikuMusicCommands(commands.Cog):
         return await interaction.followup.send(f'Playing [{song_title}]({self.song_sources_queue[1]}) next')
     @app_commands.command(name='loop',description='Loop current song')
     @app_commands.guilds(GUILD_ID)
-    async def loopSong(self,interaction:discord.Interaction):
+    async def loopSong(self,interaction:discord.Interaction)->discord.InteractionCallbackResponse:
         if interaction.guild.me.voice is None:
             return await interaction.response.send_message("```Not in a voice channel```")
         if not self.loop: 
@@ -160,6 +167,5 @@ class MikuMusicCommands(commands.Cog):
             sys.exit()
             return
         return await interaction.response.send_message('```Not allowed```')
-    
-async def setup(bot:commands.Bot):
+async def setup(bot:commands.Bot)->None:
     await bot.add_cog(MikuMusicCommands(bot))
