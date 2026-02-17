@@ -1,180 +1,216 @@
-import sqlite3
-import discord
 import asyncio
-import os
+import discord
 import sys
-from dotenv import load_dotenv
-from discord import app_commands
+from typing import cast
+from discord import VoiceClient, VoiceProtocol, app_commands
 from discord.ext import commands
-from youtube_downloader_dlp import get_Song_Info, get_Audio_Source
-load_dotenv()
-ID = os.getenv('SERVER_ID')
-GUILD_ID = discord.Object(id=ID)
-FFMPEG_OPTS = {
-    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-    "options": "-vn",
-}
+from botextras.youtube_downloader_dlp import get_Audio_Source, get_Song_Info
+from botextras.constants import GUILD_OBJECT
+
+
+# TODO add logger
 class MikuMusicCommands(commands.Cog):
-    def __init__(self,bot):
+    def __init__(self, bot: commands.Bot) -> None:
+        self.vc: discord.VoiceClient | None
+        self.text_channel: discord.TextChannel | None
         self.bot = bot
-        #TODO change to be server specific
-        self.song_sources_queue = []
-        self.song_names_list = []
-        self.loop = False
-        super().__init__()
-    async def join(self,interaction:discord.Interaction)->None:
-        if interaction.guild.voice_client!=None:
-            return interaction.guild.voice_client
-        if interaction.user.voice != None:
-            vc = interaction.user.voice.channel
-            await vc.connect()
-            return
-        else:
-            await interaction.followup.send("```Not in a voice chat```")
-            return
-    async def playNext(self,bot_vc:discord.VoiceProtocol)->discord.InteractionCallbackResponse:
-        if self.song_sources_queue:
-            if self.loop is False:
-                self.song_sources_queue.pop(0)
-                self.song_names_list.pop(0)
-        if self.song_sources_queue:
-            raw = await get_Audio_Source(self.song_sources_queue[0])
-            source = discord.FFmpegPCMAudio(source=raw,**FFMPEG_OPTS)
-            cur_song = self.song_names_list[0]
-            bot_vc.play(source,after=self.after)
-            return await self.text_channel.send(f'```Now playing {cur_song}!```')
-        return await self.text_channel.send(f'```Queue empty```')
-    def after(self,error)->None|str:
-        try:
-            asyncio.run_coroutine_threadsafe(self.playNext(self.bot_vc), self.bot.loop)
-            return 
-        except error as e:
-            return print(e)
-    
-    @app_commands.command(name='play',description='Enter song name')
-    @app_commands.guilds(GUILD_ID)
-    async def play(self, interaction:discord.Interaction,song_name:str)->None:
-        await interaction.response.defer(thinking=True)
-        await self.join(interaction)
-        if interaction.guild.me.voice is None:
-            return
-        self.bot_vc = interaction.guild.voice_client
-        self.text_channel = interaction.channel
-        song_title,url = await get_Song_Info(song_name)
-        if song_title is None:
-            return await interaction.followup.send(f'```Invalid link```')
-        self.song_sources_queue.append(url)
-        self.song_names_list.append(song_title)
-        if self.bot_vc.is_playing():
-            await interaction.followup.send(f'Added [{song_title}]({url}) to the queue')
-            return 
-        if not self.bot_vc.is_playing():
-            source = discord.FFmpegOpusAudio(source=await get_Audio_Source(url),**FFMPEG_OPTS)
-        try:
-            if source == None:
-                raise Exception
-            self.bot_vc.play(source,after=self.after)
-        except Exception as e:
-            print(e)
-            await interaction.followup.send(f'``Something went wrong try again```')
-            return 
-        await interaction.followup.send(f'Now playing [{song_title}]({url})!')
-        return
-    @app_commands.command(name='stop',description='Disconnects bot from voice channel')
-    @app_commands.guilds(GUILD_ID)
-    async def stop(self,interaction:discord.Interaction)->None:
-        if interaction.guild.me.voice is None:
-            return await interaction.response.send_message("```Not in a voice channel```")
-        await interaction.guild.voice_client.disconnect()
-        self.loop = False
-        self.song_names_list = []
-        self.song_sources_queue = []
-        await interaction.response.send_message("```Stopping playback...```")
-        return  
-    @app_commands.command(name='skip',description='Skips current song')
-    @app_commands.guilds(GUILD_ID)
-    async def skip(self,interaction:discord.Interaction)->None:
-        if interaction.guild.me.voice is None:
-            await interaction.response.send_message("```Not in a voice channel```")
-            return
-        self.loop = False
-        await interaction.response.send_message(f"```Skipping {self.song_names_list[0]}```")
-        interaction.guild.voice_client.stop()
-        return 
-    @app_commands.command(name='queue',description='Gets song queue')
-    @app_commands.guilds(GUILD_ID)
-    async def queue(self,interaction:discord.Interaction)->None:
-        if len(self.song_names_list) == 0:
-            return await interaction.response.send_message("```Queue empty```")
-        queue_str = '```'
-        for idx,song in enumerate(self.song_names_list):
-            if idx == 0:
-                queue_str += '--> ' + song +' <-- Currently playing'+'\n'
+        # tuple first val is song name, second val is song url
+        self.songs_list: list[tuple[str, str]] = []
+        self.playback_status: bool = False
+        self.song_loop: bool = False
+        self.FFMPEG_OPTS: dict[str, str] = {
+            "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+            "options": "-vn",
+        }
+
+    async def join_vc(self, interaction: discord.Interaction) -> None | VoiceProtocol:
+        guild = interaction.guild
+        user = interaction.user
+        assert guild, "Server was not found"
+        # guild voice client checks if bot is already in voice chat
+        if guild.voice_client:
+            return guild.voice_client
+        # User is for dms, Member is for server use
+        if isinstance(user, discord.Member):
+            vc_status = user.voice
+            if vc_status and vc_status.channel:
+                await vc_status.channel.connect()
+                return guild.voice_client
             else:
-                queue_str += str(idx)+'. ' + song +'\n'
-        queue_str += '```'
-        await interaction.response.send_message(queue_str)
-        return
-    @app_commands.command(name='clear',description='Clears music queue')
-    @app_commands.guilds(GUILD_ID)
-    async def clear(self,interaction:discord.Interaction)->None:
-        if not interaction.guild.me.voice :
-            self.song_names_list=[]
-            self.song_sources_queue=[]
-            interaction.guild.voice_client.stop()
-            await interaction.response.send_message('```Clearing queue...```')
-            return 
+                await interaction.followup.send("Join a voice channel first!")
+                return None
+        # returns early if not used in server
+        return None
+
+    async def helper_play_next(self):
+        last_song = True
+        if self.songs_list:
+            if not self.song_loop:
+                self.songs_list.pop(0)
+        if self.songs_list:
+            last_song = False
+            song_title, song_url = self.songs_list[0]
+            ffmpeg_source = await get_Audio_Source(song_url)
+            if ffmpeg_source and self.vc:
+                source = discord.FFmpegPCMAudio(
+                    ffmpeg_source,
+                    before_options=self.FFMPEG_OPTS["before_options"],
+                    options=self.FFMPEG_OPTS["options"],
+                )
+                self.vc.play(source, after=self.playback_callback_func)
+                if self.text_channel:
+                    await self.text_channel.send(
+                        f"Now playing [{song_title}]({song_url})!"
+                    )
+            else:
+                # Unable to find ffmpeg source move to next song
+                return self.helper_play_next()
+        if self.text_channel and last_song:
+            await self.text_channel.send("Queue empty")
+            self.playback_statue = False
+        return None
+
+    def playback_callback_func(self, error):
+        if error:
+            print(f"Error occured {error}")
+            return None
+        asyncio.run_coroutine_threadsafe(self.helper_play_next(), self.bot.loop)
+        return None
+
+    @app_commands.command(name="play", description="Enter song name or song url")
+    @app_commands.guilds(GUILD_OBJECT)
+    async def play(self, interaction: discord.Interaction, song_name: str) -> None:
+        await interaction.response.defer()
+        vc: discord.VoiceProtocol | None = await self.join_vc(interaction)
+        if not vc:
+            return None
+        # VoiceProtocol and VoiceClient effectively the same (maybe true?)
+        # VoiceClient has auto completion for text editors, pyright gets mad otherwise
+        vc = cast(VoiceClient, vc)
+        # set text channel so playnext callback function able to send to correct channel
+        self.text_channel = cast(discord.TextChannel, interaction.channel)
+        song_info = await get_Song_Info(song_name)
+        if not song_info:
+            await interaction.followup.send("Invalid url or song title.")
+            return None
+        song_title, song_url = song_info
+        self.songs_list.append(song_info)
+        if vc.is_playing():
+            await interaction.followup.send(
+                f"Added [{song_title}]({song_url}) to the queue!"
+            )
+            return None
+        ffmpeg_source = await get_Audio_Source(song_url)
+        if ffmpeg_source:
+            source = discord.FFmpegPCMAudio(
+                ffmpeg_source,
+                before_options=self.FFMPEG_OPTS["before_options"],
+                options=self.FFMPEG_OPTS["options"],
+            )
+            self.vc = vc
+            vc.play(source, after=self.playback_callback_func)
+            await interaction.followup.send(f"Now playing [{song_title}]({song_url})!")
+            return None
         else:
-            await interaction.response.send_message("```Not in a voice channel```")    
-            return 
-        
-    @app_commands.command(name='play-next',description='Insert song to be played next')
-    @app_commands.guilds(GUILD_ID)
-    async def queueNext(self,interaction:discord.Interaction,song_name:str)->None:
-        if interaction.guild.me.voice is None:
-            return await interaction.response.send_message("```Not in a voice channel```")
-        await interaction.response.defer(thinking=True)
-        song_title,song_source = await get_Song_Info(song_name)
-        if song_title is None:
-            await interaction.followup.send(f"```Unable to find {song_name}```")
-            return 
-        self.song_sources_queue.insert(1,song_source)
-        self.song_names_list.insert(1,song_title)
-        await interaction.followup.send(f'Playing [{song_title}]({self.song_sources_queue[1]}) next')
-        return 
-    @app_commands.command(name='loop',description='Loop current song')
-    @app_commands.guilds(GUILD_ID)
-    async def loopSong(self,interaction:discord.Interaction)->None:
-        if interaction.guild.me.voice is None:
+            await interaction.followup.send("Something went wrong... try again!")
+            return None
+
+    @app_commands.command(name="stop", description="Disconnects bot from voice channel")
+    @app_commands.guilds(GUILD_OBJECT)
+    async def stop(self, interaction: discord.Interaction) -> None:
+        if not self.vc:
+            await interaction.response.send_message("Not in a voice channel")
+            return None
+        await self.vc.disconnect()
+        self.vc = None
+        self.song_loop = False
+        self.songs_list = []
+        await interaction.response.send_message("Stopping playback...")
+        return
+
+    @app_commands.command(name="clear", description="Clears music queue")
+    @app_commands.guilds(GUILD_OBJECT)
+    async def clear(self, interaction: discord.Interaction) -> None:
+        if self.vc:
+            self.vc.stop()
+            self.vc = None
+            self.song_loop = False
+            self.songs_list = []
+            await interaction.response.send_message("Clearing queue...")
+            return None
+        else:
+            await interaction.response.send_message("Not in a voice channel")
+            return None
+
+    @app_commands.command(name="queue", description="Gets song queue")
+    @app_commands.guilds(GUILD_OBJECT)
+    async def queue(self, interaction: discord.Interaction) -> None:
+        if not self.songs_list:
+            await interaction.response.send_message("Queue empty")
+            return None
+        queue_str = "```"
+        for idx, (song, _) in enumerate(self.songs_list):
+            if idx == 0:
+                queue_str += "--> " + song + " <-- Currently playing" + "\n"
+            else:
+                queue_str += str(idx) + ". " + song + "\n"
+        queue_str += "```"
+        await interaction.response.send_message(queue_str)
+        return None
+
+    @app_commands.command(name="skip", description="Skips current song")
+    @app_commands.guilds(GUILD_OBJECT)
+    async def skip(self, interaction: discord.Interaction) -> None:
+        if not self.vc:
             await interaction.response.send_message("```Not in a voice channel```")
-            return 
-        if not self.loop: 
-            self.loop = True
-            await interaction.response.send_message("```Looping current song```")
-            return 
-        self.loop = False
-        await interaction.response.send_message("```No longer looping current song```")
-        return 
-    @app_commands.command(name='remove',description='Remove song from queue')
-    @app_commands.guilds(GUILD_ID)
-    async def removeFromQueue(self,interaction:discord.Interaction,index:int)->None:
+            return None
+        self.song_loop = False
+        await interaction.response.send_message(
+            f"```Skipping {self.songs_list[0][0]}```"
+        )
+        self.vc.stop()
+        return None
+
+    @app_commands.command(name="remove", description="Remove song from queue")
+    @app_commands.guilds(GUILD_OBJECT)
+    async def removeFromQueue(
+        self, interaction: discord.Interaction, index: int
+    ) -> None:
         try:
             if index == 0:
                 raise IndexError
-            await interaction.response.send_message(f"```Removing {self.song_names_list[index]} from queue```")
-            self.song_names_list.pop(index)
-            self.song_sources_queue.pop(index)
+            await interaction.response.send_message(
+                f"```Removing {self.songs_list[index][0]} from queue```"
+            )
+            self.songs_list.pop(index)
         except IndexError:
-            await interaction.response.send_message(f'```Not a valid number!```')
-        return
-    @app_commands.command(name='die',description='Shuts down bot')
-    @app_commands.guilds(GUILD_ID)
-    async def die(self,interaction:discord.Interaction)->None:
+            await interaction.response.send_message("```Not a valid number!```")
+        return None
+
+    @app_commands.command(name="die", description="Shuts down bot")
+    @app_commands.guilds(GUILD_OBJECT)
+    async def die(self, interaction: discord.Interaction) -> None:
         if interaction.user.id == 325767307114840074:
-            await interaction.response.send_message('```Dying....```')
+            await interaction.response.send_message("Dying....")
             await self.bot.close()
             sys.exit()
-        await interaction.response.send_message('```Not allowed```')
-        return 
-async def setup(bot:commands.Bot)->None:
+        await interaction.response.send_message("Not allowed")
+        return
+
+    @app_commands.command(name="loop", description="Loop current song")
+    @app_commands.guilds(GUILD_OBJECT)
+    async def loopSong(self, interaction: discord.Interaction) -> None:
+        if not self.vc:
+            await interaction.response.send_message("Not in a voice channel")
+            return
+        if not self.song_loop:
+            self.song_loop = True
+            await interaction.response.send_message("Looping current song")
+            return
+        self.song_loop = False
+        await interaction.response.send_message("No longer looping current song")
+        return
+
+
+async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(MikuMusicCommands(bot))

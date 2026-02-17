@@ -6,3 +6,6 @@
 *.env
 *old_files
 *commandsync.py
+*test.py
+*pyrightconfig.json
+*scripts
