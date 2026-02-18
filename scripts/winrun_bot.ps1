@@ -1,5 +1,5 @@
 $Project_Root = split-path $PSScriptRoot -Parent
-. (join-path $Project_Root"HatsuneMikuENV\Scripts\Activate.ps1")
+. (join-path $Project_Root"EnvHatsuneMiku\Scripts\Activate.ps1")
 try {
     python -m pip install --upgrade yt-dlp
     python -m pip install --upgrade pip

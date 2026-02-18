@@ -1,18 +1,17 @@
 import asyncio
 import discord
-import sys
 from typing import cast
 from discord import VoiceClient, VoiceProtocol, app_commands
 from discord.ext import commands
 from botextras.youtube_downloader_dlp import get_Audio_Source, get_Song_Info
-from botextras.constants import GUILD_OBJECT
+from botextras.constants import GUILD_OBJECT, USER_ID
 
 
 # TODO add logger
 class MikuMusicCommands(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
-        self.vc: discord.VoiceClient | None
-        self.text_channel: discord.TextChannel | None
+        self.vc: discord.VoiceClient | None = None
+        self.text_channel: discord.TextChannel | None = None
         self.bot = bot
         # tuple first val is song name, second val is song url
         self.songs_list: list[tuple[str, str]] = []
@@ -37,7 +36,14 @@ class MikuMusicCommands(commands.Cog):
                 await vc_status.channel.connect()
                 return guild.voice_client
             else:
-                await interaction.followup.send("Join a voice channel first!")
+                if interaction.response.is_done():
+                    await interaction.followup.send(
+                        "Join a voice channel first!", ephemeral=True
+                    )
+                else:
+                    await interaction.response.send_message(
+                        "Join a voice channel first!", ephemeral=True
+                    )
                 return None
         # returns early if not used in server
         return None
@@ -80,15 +86,19 @@ class MikuMusicCommands(commands.Cog):
     @app_commands.command(name="play", description="Enter song name or song url")
     @app_commands.guilds(GUILD_OBJECT)
     async def play(self, interaction: discord.Interaction, song_name: str) -> None:
-        await interaction.response.defer()
         vc: discord.VoiceProtocol | None = await self.join_vc(interaction)
         if not vc:
             return None
+        await interaction.response.defer()
         # VoiceProtocol and VoiceClient effectively the same (maybe true?)
         # VoiceClient has auto completion for text editors, pyright gets mad otherwise
         vc = cast(VoiceClient, vc)
         # set text channel so playnext callback function able to send to correct channel
-        self.text_channel = cast(discord.TextChannel, interaction.channel)
+        self.text_channel = (
+            cast(discord.TextChannel, interaction.channel)
+            if not self.text_channel
+            else self.text_channel
+        )
         song_info = await get_Song_Info(song_name)
         if not song_info:
             await interaction.followup.send("Invalid url or song title.")
@@ -119,7 +129,7 @@ class MikuMusicCommands(commands.Cog):
     @app_commands.guilds(GUILD_OBJECT)
     async def stop(self, interaction: discord.Interaction) -> None:
         if not self.vc:
-            await interaction.response.send_message("Not in a voice channel")
+            await interaction.response.send_message("Not in a voice channel!")
             return None
         await self.vc.disconnect()
         self.vc = None
@@ -139,7 +149,9 @@ class MikuMusicCommands(commands.Cog):
             await interaction.response.send_message("Clearing queue...")
             return None
         else:
-            await interaction.response.send_message("Not in a voice channel")
+            await interaction.response.send_message(
+                "Not in a voice channel", ephemeral=True
+            )
             return None
 
     @app_commands.command(name="queue", description="Gets song queue")
@@ -162,12 +174,12 @@ class MikuMusicCommands(commands.Cog):
     @app_commands.guilds(GUILD_OBJECT)
     async def skip(self, interaction: discord.Interaction) -> None:
         if not self.vc:
-            await interaction.response.send_message("```Not in a voice channel```")
+            await interaction.response.send_message(
+                "`Not in a voice channel`", ephemeral=True
+            )
             return None
         self.song_loop = False
-        await interaction.response.send_message(
-            f"```Skipping {self.songs_list[0][0]}```"
-        )
+        await interaction.response.send_message(f"`Skipping {self.songs_list[0][0]}`")
         self.vc.stop()
         return None
 
@@ -180,36 +192,40 @@ class MikuMusicCommands(commands.Cog):
             if index == 0:
                 raise IndexError
             await interaction.response.send_message(
-                f"```Removing {self.songs_list[index][0]} from queue```"
+                f"`Removing {self.songs_list[index][0]} from queue`"
             )
             self.songs_list.pop(index)
         except IndexError:
-            await interaction.response.send_message("```Not a valid number!```")
+            await interaction.response.send_message(
+                "`Not a valid number!`", ephemeral=True
+            )
         return None
 
     @app_commands.command(name="die", description="Shuts down bot")
     @app_commands.guilds(GUILD_OBJECT)
     async def die(self, interaction: discord.Interaction) -> None:
-        if interaction.user.id == 325767307114840074:
-            await interaction.response.send_message("Dying....")
+        if interaction.user.id == USER_ID:
+            await interaction.response.send_message("Shutting down...")
             await self.bot.close()
-            sys.exit()
-        await interaction.response.send_message("Not allowed")
-        return
+            return None
+        await interaction.response.send_message("Not allowed", ephemeral=True)
+        return None
 
     @app_commands.command(name="loop", description="Loop current song")
     @app_commands.guilds(GUILD_OBJECT)
     async def loopSong(self, interaction: discord.Interaction) -> None:
         if not self.vc:
-            await interaction.response.send_message("Not in a voice channel")
-            return
+            await interaction.response.send_message(
+                "Not in a voice channel", ephemeral=True
+            )
+            return None
         if not self.song_loop:
             self.song_loop = True
             await interaction.response.send_message("Looping current song")
-            return
+            return None
         self.song_loop = False
         await interaction.response.send_message("No longer looping current song")
-        return
+        return None
 
 
 async def setup(bot: commands.Bot) -> None:

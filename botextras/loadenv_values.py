@@ -14,7 +14,8 @@ def write_to_env() -> None:
         f.write(f"DISCORD_TOKEN='{env_vals_input('DISCORD_TOKEN')}'\n")
         f.write(f"GUILD_ID='{env_vals_input('GUILD_ID')}'\n")
         f.write(f"SPOTIFY_CLIENT_ID='{env_vals_input('SPOTIFY_CLIENT_ID')}'\n")
-        f.write(f"SPOTIFY_CLIENT_SECRET='{env_vals_input('SPOTIFY_CLIENT_SECRET')}'")
+        f.write(f"SPOTIFY_CLIENT_SECRET='{env_vals_input('SPOTIFY_CLIENT_SECRET')}'\n")
+        f.write(f"USER_ID='{env_vals_input('USER_ID')}'")
     return None
 
 

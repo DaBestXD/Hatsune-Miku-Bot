@@ -1,9 +1,11 @@
 import discord
 from discord.ext import commands
 from botextras.constants import DISCORD_TOKEN, GUILD_ID, GUILD_OBJECT
+from botextras.loadenv_values import load_env_vals
 
 
 def main():
+    load_env_vals()
     if not DISCORD_TOKEN:
         raise KeyError("Discord Token cannot be none")
     if not GUILD_ID:
