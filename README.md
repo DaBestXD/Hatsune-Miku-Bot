@@ -27,6 +27,7 @@ Under the same page scroll down to bot permissions then select Administrator
 Finally at the bottom of the page select guild install for integration type and open the link under generated URL and select the server you want to add the bot(Must have manage server perms)
 ![Generated guild install URL](githubpictures/dis_oauth3.png "Oauth perms")
 </details>
+
 ### Windows setup
 Run `scripts/windows_botsetup.ps1`, <br>
 then to start the bot run `scripts/winrun_bot.ps1`.<br>
