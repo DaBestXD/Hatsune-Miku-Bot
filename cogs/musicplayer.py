@@ -204,6 +204,9 @@ class MikuMusicCommands(commands.Cog):
     @app_commands.command(name="die", description="Shuts down bot")
     @app_commands.guilds(GUILD_OBJECT)
     async def die(self, interaction: discord.Interaction) -> None:
+        if not USER_ID:
+            await interaction.response.send_message("User ID was never provided", ephemeral=True)
+            return None
         if interaction.user.id == USER_ID:
             await interaction.response.send_message("Shutting down...")
             await self.bot.close()
