@@ -13,6 +13,7 @@ Then right click on your profile to copy user id, and right click on desired ser
 ### Discord API setup
 <details>
 <summary>Click to expand</summary>
+
 On the discord developer [homepage](https://discord.com/developers/applications) click on new application and set a name for the bot
 ![Create a new Discord application](githubpictures/dis_newapp.png "New application")
 Once the new application is created click on bot under settings, then reset token and copy this down(IMPORTANT DO NOT SHARE THIS!!)
