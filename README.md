@@ -11,6 +11,7 @@ Enable developer mode in the discord user settings
 ![Enable developer mode](githubpictures/developer_mode.png)
 Then right click on your profile to copy user id, and right click on desired server and click on copy server id.
 ### Discord API setup
+<details>
 On the discord developer [homepage](https://discord.com/developers/applications) click on new application and set a name for the bot
 ![Create a new Discord application](githubpictures/dis_newapp.png "New application")
 Once the new application is created click on bot under settings, then reset token and copy this down(IMPORTANT DO NOT SHARE THIS!!)
@@ -23,6 +24,7 @@ Under the same page scroll down to bot permissions then select Administrator
 ![OAuth2 bot permissions](githubpictures/dis_oauth2.png "Oauth perms")
 Finally at the bottom of the page select guild install for integration type and open the link under generated URL and select the server you want to add the bot(Must have manage server perms)
 ![Generated guild install URL](githubpictures/dis_oauth3.png "Oauth perms")
+</details>
 ### Windows setup
 Run `scripts/windows_botsetup.ps1`, <br>
 then to start the bot run `scripts/winrun_bot.ps1`.<br>
