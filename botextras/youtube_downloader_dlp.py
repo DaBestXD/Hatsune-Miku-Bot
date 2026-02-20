@@ -2,12 +2,11 @@ import re
 import requests
 import base64
 import warnings
-import yt_dlp.utils
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 from botextras.constants import CLIENT_ID, CLIENT_SECRET
 
-YDL_OPTS: yt_dlp._Params = {
+YDL_OPTS = {
     "format": "bestaudio/best",
     "default_search": "ytsearch1",
     "js_runtimes": {"node": {}},

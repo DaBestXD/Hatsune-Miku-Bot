@@ -39,13 +39,13 @@ Then right click on your profile to copy user id, and right click on desired ser
 
 ### Windows setup
 
-Run `scripts/windows_botsetup.ps1`, <br>
-then to start the bot run `scripts/winrun_bot.ps1`.<br>
+Run `.\'Hatsune-Miku-Bot'\scripts\windows_botsetup.ps1`, <br>
+then to start the bot run `.\'Hatsune-Miku-Bot'\scripts\winrun_bot.ps1`.<br>
 
 ### Linux/Mac setup
 
 Install `ffmpeg`.<br>
-Install `deno` or any other javascript runtime/engine(Dependency for yt-dlp) <br>
+Install `deno` or `node` (Dependency for yt-dlp) <br>
 Run `scripts/bash_botsetup.sh`,<br>
 then to start the bot run `scripts/bashrun_bot.sh`.<br>
 
