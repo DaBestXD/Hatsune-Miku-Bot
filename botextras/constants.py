@@ -1,7 +1,9 @@
 import os
 import discord
 from dotenv import load_dotenv
+from botextras.loadenv_values import load_env_vals
 
+load_env_vals()
 load_dotenv()
 CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
