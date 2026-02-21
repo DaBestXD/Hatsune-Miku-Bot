@@ -15,7 +15,6 @@ A locally hosted Discord Bot for playing music with your friends.<br>
 
 ## Installation Guide
 
-
 ### Discord API setup
 
 On the discord developer [homepage](https://discord.com/developers/applications) click on new application and set a name for the bot<br>
@@ -54,4 +53,5 @@ then to start the bot run `scripts/bashrun_bot.sh`.<br>
 On first bot startup you will be prompted to enter Discord Bot API key and Server ID.<br>
 These values must be valid for functioning bot.<br>
 Optional values will be asked next: Spotify Client ID, Spotify Client Secret, and User ID.<br>
+The User ID will designate an admin user that can shutdown the bot with `/die`.<br>
 If the bot fails to start, ensure that `.env` values match Discord Bot API key and Server ID.<br> `.env` file is found in project root<br>
