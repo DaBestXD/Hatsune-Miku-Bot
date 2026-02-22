@@ -2,17 +2,20 @@ import re
 import requests
 import base64
 import warnings
+from typing import Any, cast
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 from botextras.constants import CLIENT_ID, CLIENT_SECRET
 
-YDL_OPTS = {
+YDL_OPTS_R = {
     "format": "bestaudio/best",
     "default_search": "ytsearch1",
     "js_runtimes": {"node": {}},
     "noplaylist": True,
     "no_warnings": True,
 }
+#Any cast to make the type check shut up cause importing _Params doesnt work😾
+YDL_OPTS = cast(Any, YDL_OPTS_R)
 YOUTUBE = "youtu"
 SOUNDCLOUD = "soundcloud"
 SPOTIFY = "spotify"

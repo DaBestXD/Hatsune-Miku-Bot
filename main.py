@@ -11,7 +11,8 @@ def main():
 
     class Bot(commands.Bot):
         async def setup_hook(self) -> None:
-            await self.load_extension("cogs.musicplayer")
+            # await self.load_extension("cogs.musicplayer")
+            await self.load_extension("cogs.rewritemusicplayer")
             await self.tree.sync(guild=GUILD_OBJECT)
 
     intents = discord.Intents.default()

@@ -1,9 +1,10 @@
 import asyncio
 import discord
+import random
 from typing import cast
 from discord import VoiceClient, VoiceProtocol, app_commands
 from discord.ext import commands
-from botextras.youtube_downloader_dlp import get_Audio_Source, get_Song_Info
+from botextras.rewrite_downloader_dlp import get_Audio_Source, get_Song_Info
 from botextras.constants import GUILD_OBJECT, USER_ID
 
 
@@ -14,7 +15,7 @@ class MikuMusicCommands(commands.Cog):
         self.text_channel: discord.TextChannel | None = None
         self.bot: commands.Bot = bot
         # tuple first val is song name, second val is song url
-        self.songs_list: list[tuple[str, str]] = []
+        self.songs_list: list[tuple[str|None,... ]] = []
         self.playback_status: bool = False
         self.song_loop: bool = False
         self.FFMPEG_OPTS: dict[str, str] = {
@@ -56,7 +57,7 @@ class MikuMusicCommands(commands.Cog):
         if self.songs_list:
             last_song = False
             song_title, song_url = self.songs_list[0]
-            ffmpeg_source = await get_Audio_Source(song_url)
+            ffmpeg_source = await get_Audio_Source((song_title,song_url))
             if ffmpeg_source and self.vc:
                 source = discord.FFmpegPCMAudio(
                     ffmpeg_source,
@@ -103,14 +104,24 @@ class MikuMusicCommands(commands.Cog):
         if not song_info:
             await interaction.followup.send("Invalid url or song title.")
             return None
-        song_title, song_url = song_info
-        self.songs_list.append(song_info)
+        if len(song_info) > 1:
+            *songs, playlist_info = song_info
+            playlist_name, playlist_link, playlist_count = playlist_info
+            song_title, song_url = songs[0]
+            self.songs_list.extend(songs)
+            ffmpeg_source = await get_Audio_Source((song_title,song_url))
+            await interaction.followup.send(f"added [{playlist_name}]({playlist_link}) to the queue! ({playlist_count} songs)")
+        else:
+            song_title, song_url = song_info[0]
+            self.songs_list.extend(song_info)
+            ffmpeg_source = await get_Audio_Source((song_title,song_url))
         if vc.is_playing():
-            await interaction.followup.send(
-                f"Added [{song_title}]({song_url}) to the queue!"
-            )
-            return None
-        ffmpeg_source = await get_Audio_Source(song_url)
+            if len(song_info) < 2:
+                await interaction.followup.send(f"Added [{song_title}]({song_url}) to the queue!")
+                return None
+            else:
+                await interaction.followup.send(f"added [{playlist_name}]({playlist_link}) to the queue! ({playlist_count} songs)")
+                return None
         if ffmpeg_source:
             source = discord.FFmpegPCMAudio(
                 ffmpeg_source,
@@ -135,7 +146,10 @@ class MikuMusicCommands(commands.Cog):
         self.vc = None
         self.song_loop = False
         self.songs_list = []
-        await interaction.response.send_message("Stopping playback...")
+        if interaction.response.is_done():
+            await interaction.followup.send("Stopping playback...")
+        else:
+            await interaction.response.send_message("Stopping playback...")
         return
 
     @app_commands.command(name="clear", description="Clears music queue")
@@ -161,11 +175,16 @@ class MikuMusicCommands(commands.Cog):
             await interaction.response.send_message("Queue empty")
             return None
         queue_str = "```"
-        for idx, (song, _) in enumerate(self.songs_list):
-            if idx == 0:
-                queue_str += "--> " + song + " <-- Currently playing" + "\n"
-            else:
-                queue_str += str(idx) + ". " + song + "\n"
+        if len(self.songs_list) > 9:
+            song_slice = self.songs_list[:11]
+        else:
+            song_slice = self.songs_list
+        for idx, (song, _) in enumerate(song_slice):
+            if song:
+                if idx == 0:
+                    queue_str += "--> " + song + " <-- Currently playing" + "\n"
+                else:
+                    queue_str += str(idx) + ". " + song + "\n"
         queue_str += "```"
         await interaction.response.send_message(queue_str)
         return None
@@ -229,6 +248,19 @@ class MikuMusicCommands(commands.Cog):
         self.song_loop = False
         await interaction.response.send_message("No longer looping current song")
         return None
+    @app_commands.command(name="shuffle", description="Shuffles the queue")
+    @app_commands.guilds(GUILD_OBJECT)
+    async def shuffle(self, interaction: discord.Interaction) -> None:
+        if not self.songs_list:
+            await interaction.response.send_message("Queue empty")
+            return None
+        first_song = [self.songs_list[0]]
+        exl_first = self.songs_list[1:]
+        random.shuffle(exl_first)
+        self.songs_list = first_song + exl_first
+        await interaction.response.send_message("Queue shuffled")
+        return None
+
 
 
 async def setup(bot: commands.Bot) -> None:

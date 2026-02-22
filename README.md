@@ -44,7 +44,7 @@ then to start the bot run `.\'Hatsune-Miku-Bot'\scripts\winrun_bot.ps1`.<br>
 ### Linux/Mac setup
 
 Install `ffmpeg`.<br>
-Install `deno` or `node` (Dependency for yt-dlp) <br>
+Install `node` (Dependency for yt-dlp) <br>
 Run `scripts/bash_botsetup.sh`,<br>
 then to start the bot run `scripts/bashrun_bot.sh`.<br>
 
