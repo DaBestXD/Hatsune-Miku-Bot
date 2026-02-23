@@ -69,9 +69,13 @@ def sp_multi_helper_func(api_link: str, headers: dict[str,str], params: dict[str
             print(f"Something bad happen trying to get the items of {api_link}")
             return None
         if path_type == "album":
-            songs.extend([(item["name"] + " - " + item["artists"][0]["name"],item["external_urls"]["spotify"]) for item in items])
+            songs.extend([(item["name"] + " - " +
+                item["artists"][0]["name"],item["external_urls"]["spotify"])
+                for item in items if item.get("external_urls")])
         if path_type == "playlist":
-            songs.extend([(item["track"]["name"] + " - " + item["track"]["artists"][0]["name"],item["track"]["external_urls"]["spotify"]) for item in items])
+            songs.extend([(item["track"]["name"] + " - " +
+                item["track"]["artists"][0]["name"],item["track"]["external_urls"]["spotify"])
+                for item in items if item["track"].get("external_urls")])
         api_link = song_json.get("next")
         params = None
     return songs
