@@ -2,6 +2,7 @@ import re
 import requests
 import base64
 import warnings
+import asyncio
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 from botextras.constants import (CLIENT_ID,
@@ -133,39 +134,45 @@ def get_Soundcloud_Info(url: str) -> list[tuple[str|None, ...]] | None:
     if re.match(r"(.*sets+.*)(?:\?)", url):
         print("Soundcloud playlists are not accepted")
         return None
-    with YoutubeDL(params=YDL_OPTS) as ydl:
-        # formats soundclound links to just be domain/artist/track_name
-        result = ydl.extract_info(url, download=False)
-        restricted = True
-        formats = result.get("formats")
-        title = result.get("title")
-        if formats and title:
-            for key in formats:
-                if "http_mp3" in key["format_id"]:
-                    restricted = False
-            if restricted:
-                print("Unable to retrieve soundcloud http_mp3")
-                return None
-            return [(title, url)]
-        print("Regex bad something something")
-        return None
+    try:
+        with YoutubeDL(params=YDL_OPTS) as ydl:
+            # formats soundclound links to just be domain/artist/track_name
+            result = ydl.extract_info(url, download=False)
+            restricted = True
+            formats = result.get("formats")
+            title = result.get("title")
+            if formats and title:
+                for key in formats:
+                    if "http_mp3" in key["format_id"]:
+                        restricted = False
+                if restricted:
+                    print("Unable to retrieve soundcloud http_mp3")
+                    return None
+                return [(title, url)]
+            print("Regex bad something something")
+            return None
+    except DownloadError as e:
+        print(f"DownloadError: {e}")
 
 
 def search_Query(query: str) -> list[tuple[str, str|None]] | None:
-    with YoutubeDL(params=YDL_OPTS) as ydl:
-        result = ydl.extract_info(query, download=False)
-        entries = result.get("entries")
-        if entries:
-            for n in entries:
-                song_url = n.get("url")
-                if "channel" in song_url:
-                    continue
-                song_title = n.get("title")
-                return [(song_title, song_url)]
-        else:
-            return None
+    try:
+        with YoutubeDL(params=YDL_OPTS) as ydl:
+            result = ydl.extract_info(query, download=False)
+            entries = result.get("entries")
+            if entries:
+                for n in entries:
+                    song_url = n.get("url")
+                    if "channel" in song_url:
+                        continue
+                    song_title = n.get("title")
+                    return [(song_title, song_url)]
+            else:
+                return None
+    except DownloadError as e:
+        print(f"DownloadError: {e}") 
 
-async def get_Song_Info(url: str) -> list[tuple[str|None, ...]] | None:
+def _get_Song_Info(url: str) -> list[tuple[str|None, ...]] | None:
     # Filters into two parts domain and other
     grouped_url = re.match(r"(?:https://)([a-z.]+/)(.*)", url)
     if grouped_url is None:
@@ -182,10 +189,11 @@ async def get_Song_Info(url: str) -> list[tuple[str|None, ...]] | None:
     if SOUNDCLOUD in url_domain:
         return get_Soundcloud_Info(url)
     return None
-
+async def get_Song_Info(url: str):
+    return await asyncio.to_thread(_get_Song_Info, url)
 
 # Final function before audio plays should only take in url's as input
-async def get_Audio_Source(query: tuple[str|None,str|None]) -> str | None:
+def _get_Audio_Source(query: tuple[str|None, ...]) -> str | None:
     try:
         with YoutubeDL(AUDIO_OPTS) as ydl:
             title, url = query
@@ -202,3 +210,5 @@ async def get_Audio_Source(query: tuple[str|None,str|None]) -> str | None:
     except DownloadError as e:
         print(f"Download error: {e}")
         return None
+async def get_Audio_Source(query: tuple[str|None, ...]):
+    return await asyncio.to_thread(_get_Audio_Source, query)

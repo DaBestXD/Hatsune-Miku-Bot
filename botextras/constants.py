@@ -20,13 +20,13 @@ YDL_OPTS = cast(Any,{
     "js_runtimes": {"node": {}},
     "extract_flat": "in_playlist",
     "remote_components": ["ejs:github"],
-    "quiet" : True})
+})
 AUDIO_OPTS = cast(Any,{
     "format": "bestaudio/best",
     "js_runtimes": {"node":{}},
     "default_search": "ytsearch1",
     "remote_components": ["ejs:github"],
-    "quiet" : True})
+})
 SP_PLAYLIST_PARAMS = {"market": "US","fields": "items(track(name,artists(name),external_urls(spotify))),next,total",}
 SP_ALBUM_PARAMS = {"market": "US","fields": "items(name,artists(name),external_urls(spotify)),next,total",}
 SP_PLAYLIST_META_PARAMS = {"market": "US","fields": "name,tracks(total)",}

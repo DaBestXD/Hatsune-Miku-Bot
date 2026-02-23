@@ -1,8 +1,9 @@
 import asyncio
 import discord
 import random
+import io
 from typing import cast
-from discord import FFmpegPCMAudio, PCMVolumeTransformer, VoiceClient, VoiceProtocol, app_commands
+from discord import FFmpegPCMAudio, InteractionCallbackResponse, PCMVolumeTransformer, VoiceClient, VoiceProtocol, WebhookMessage, app_commands
 from discord.ext import commands
 from botextras.audio_handler import get_Audio_Source, get_Song_Info
 from botextras.constants import GUILD_OBJECT, USER_ID
@@ -16,14 +17,46 @@ class MikuMusicCommands(commands.Cog):
         self.bot: commands.Bot = bot
         # tuple first val is song name, second val is song url
         self.songs_list: list[tuple[str|None,... ]] = []
+        self.song_cache: dict[str,str] = {}
         self.playback_status: bool = False
         self.song_loop: bool = False
         self.source: PCMVolumeTransformer | None = None
         self.volume: float = 1.00
+        self.last_removed: tuple[str|None,...]= ()
+        self.stderr_buf = None
         self.FFMPEG_OPTS: dict[str, str] = {
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
             "options": "-vn",
         }
+
+    async def cleanup_cache(self, song_url: str)->None:
+        print(f"Removing {song_url} in 10 minutes")
+        await asyncio.sleep(600)
+        if song_url in self.song_cache:
+            print(f"Removed {song_url} from cache")
+            self.song_cache.pop(song_url)
+        return None
+
+    async def cache_index(self, idx: int = 1)->None:
+        if len(self.songs_list) < idx + 1:
+            print(f"{self.songs_list} less than {idx}")
+            return None
+        song_title, song_url = self.songs_list[idx]
+        if song_title and song_url:
+            if song_url not in self.song_cache:
+                audio_source = await get_Audio_Source((song_title, song_url))
+                if audio_source:
+                    self.song_cache[song_url] = audio_source
+                    print(f"Caching {song_title}")
+                    asyncio.create_task(self.cleanup_cache(song_url))
+            else:
+                print(f"{song_title} already in cache")
+        return None
+
+    async def reply(self, interaction: discord.Interaction, msg: str, **kwargs)-> WebhookMessage | InteractionCallbackResponse:
+        if interaction.response.is_done():
+            return await interaction.followup.send(msg, **kwargs)
+        return await interaction.response.send_message(msg, **kwargs)
 
     async def join_vc(self, interaction: discord.Interaction) -> None | VoiceProtocol:
         guild = interaction.guild
@@ -39,28 +72,35 @@ class MikuMusicCommands(commands.Cog):
                 await vc_status.channel.connect()
                 return guild.voice_client
             else:
-                if interaction.response.is_done():
-                    await interaction.followup.send("Join a voice channel first!", ephemeral=True)
-                else:
-                    await interaction.response.send_message("Join a voice channel first!", ephemeral=True)
+                await self.reply(interaction,"Join a voice channel first!", ephemeral=True)
                 return None
         # returns early if not used in server
         return None
 
-    async def helper_play_next(self):
+    async def helper_play_next(self, failed :bool=False):
         last_song = True
-        if self.songs_list:
+        if self.songs_list and not failed:
             if not self.song_loop:
+                self.last_removed = self.songs_list[0]
                 self.songs_list.pop(0)
+        if failed:
+            self.songs_list.insert(0, self.last_removed)
         if self.songs_list:
+            await self.cache_index()
             last_song = False
             song_title, song_url = self.songs_list[0]
-            ffmpeg_source = await get_Audio_Source((song_title,song_url))
+            self.stderr_buf = io.BytesIO()
+            if song_url not in self.song_cache:
+                ffmpeg_source = await get_Audio_Source((song_title,song_url))
+            else:
+                ffmpeg_source = self.song_cache[song_url]
+                self.song_cache.pop(song_url)
             if ffmpeg_source and self.vc:
                 source = PCMVolumeTransformer(FFmpegPCMAudio(
                     ffmpeg_source,
                     before_options=self.FFMPEG_OPTS["before_options"],
                     options=self.FFMPEG_OPTS["options"],
+                    stderr=self.stderr_buf
                 ),volume=self.volume)
                 self.source = source
                 self.vc.play(source, after=self.playback_callback_func)
@@ -76,10 +116,15 @@ class MikuMusicCommands(commands.Cog):
         return None
 
     def playback_callback_func(self, error):
+        failed = False
+        if self.stderr_buf:
+            ffmpeg_error = self.stderr_buf.getvalue().decode("utf-8",errors="ignore")
+            if "403 Forbidden" in ffmpeg_error:
+                failed = True
         if error:
             print(f"Error occured {error}")
             return None
-        asyncio.run_coroutine_threadsafe(self.helper_play_next(), self.bot.loop)
+        asyncio.run_coroutine_threadsafe(self.helper_play_next(failed), self.bot.loop)
         return None
 
     @app_commands.command(name="play", description="Enter song name or song url")
@@ -103,17 +148,17 @@ class MikuMusicCommands(commands.Cog):
             playlist_name, playlist_link, playlist_count = playlist_info
             song_title, song_url = songs[0]
             self.songs_list.extend(songs)
-            ffmpeg_source = await get_Audio_Source((song_title,song_url))
-            await interaction.followup.send(f"Added {playlist_count} songs from [{playlist_name}]({playlist_link}) !")
+            await self.reply(interaction, f"Added {playlist_count} songs from [{playlist_name}]({playlist_link}) !")
             if vc.is_playing():
                 return None
+            ffmpeg_source = await get_Audio_Source((song_title,song_url))
         else:
             song_title, song_url = song_info[0]
             self.songs_list.extend(song_info)
-            ffmpeg_source = await get_Audio_Source((song_title,song_url))
-            await interaction.followup.send(f"Added [{song_title}]({song_url}) to the queue!")
+            await self.reply(interaction, f"Added [{song_title}]({song_url}) to the queue!")
             if vc.is_playing():
                 return None
+            ffmpeg_source = await get_Audio_Source((song_title,song_url))
         if ffmpeg_source:
             source = PCMVolumeTransformer(FFmpegPCMAudio(
                 ffmpeg_source,
@@ -123,27 +168,25 @@ class MikuMusicCommands(commands.Cog):
             self.source = source
             self.vc = vc
             vc.play(source, after=self.playback_callback_func)
-            await interaction.followup.send(f"Now playing [{song_title}]({song_url}) !")
+            await self.reply(interaction, f"Now playing [{song_title}]({song_url}) !")
+            await self.cache_index()
             return None
         else:
-            await interaction.followup.send("`Something went wrong... try again!`")
+            await self.reply(interaction, "`Something went wrong... try again!`")
             return None
 
     @app_commands.command(name="stop", description="Disconnects bot from voice channel")
     @app_commands.guilds(GUILD_OBJECT)
     async def stop(self, interaction: discord.Interaction) -> None:
         if not self.vc:
-            await interaction.response.send_message("Not in a voice channel!")
+            await self.reply(interaction, "`Not in a voice channel!`")
             return None
         await self.vc.disconnect()
         self.vc = None
         self.song_loop = False
         self.songs_list = []
         self.source = None
-        if interaction.response.is_done():
-            await interaction.followup.send("`Stopping playback...`")
-        else:
-            await interaction.response.send_message("`Stopping playback...`")
+        await self.reply(interaction, "`Stopping playblack...`")
         return None
 
     @app_commands.command(name="clear", description="Clears music queue")
@@ -155,17 +198,17 @@ class MikuMusicCommands(commands.Cog):
             self.song_loop = False
             self.songs_list = []
             self.source = None
-            await interaction.response.send_message("`Clearing queue...`")
+            await self.reply(interaction,"`Clearing queue...`")
             return None
         else:
-            await interaction.response.send_message("`Not in a voice channel`", ephemeral=True)
+            await self.reply(interaction,"`Not in a voice channel`", ephemeral=True)
             return None
 
     @app_commands.command(name="queue", description="Gets song queue")
     @app_commands.guilds(GUILD_OBJECT)
     async def queue(self, interaction: discord.Interaction) -> None:
         if not self.songs_list:
-            await interaction.response.send_message("Queue empty")
+            await self.reply(interaction, "`Queue empty`")
             return None
         queue_str = "```"
         for idx, (song, _) in enumerate(self.songs_list[:11]):
@@ -175,47 +218,43 @@ class MikuMusicCommands(commands.Cog):
                 else:
                     queue_str += str(idx) + ". " + song + "\n"
         queue_str += "```"
-        await interaction.response.send_message(queue_str)
+        await self.reply(interaction, queue_str)
         return None
 
     @app_commands.command(name="skip", description="Skips current song")
     @app_commands.guilds(GUILD_OBJECT)
     async def skip(self, interaction: discord.Interaction) -> None:
         if not self.vc:
-            await interaction.response.send_message("`Not in a voice channel`", ephemeral=True)
+            await self.reply(interaction, "`Not in a voice channel`", ephemeral=True)
             return None
         self.song_loop = False
-        await interaction.response.send_message(f"```Skipping {self.songs_list[0][0]}```")
         self.vc.stop()
+        await self.reply(interaction, f"```Skipping {self.songs_list[0][0]}```")
         return None
 
     @app_commands.command(name="remove", description="Remove song from queue")
     @app_commands.guilds(GUILD_OBJECT)
-    async def removeFromQueue(
-        self, interaction: discord.Interaction, index: int
-    ) -> None:
+    async def removeFromQueue(self, interaction: discord.Interaction, index: int) -> None:
         try:
             if index == 0:
                 raise IndexError
-            await interaction.response.send_message(f"```Removing {self.songs_list[index][0]} from queue```")
+            await self.reply(interaction,f"```Removing {self.songs_list[index][0]} from queue```")
             self.songs_list.pop(index)
         except IndexError:
-            await interaction.response.send_message(
-                "`Not a valid number!`", ephemeral=True
-            )
+            await self.reply(interaction, "`Not a valid number!`", ephemeral=True)
         return None
 
     @app_commands.command(name="die", description="Shuts down bot")
     @app_commands.guilds(GUILD_OBJECT)
     async def die(self, interaction: discord.Interaction) -> None:
         if not USER_ID:
-            await interaction.response.send_message("`User ID was never provided`", ephemeral=True)
+            await self.reply(interaction, "`User ID was never provided`", ephemeral=True)
             return None
         if interaction.user.id == USER_ID:
-            await interaction.response.send_message("`Shutting down...`")
+            await self.reply(interaction, "`Shutting down...`")
             await self.bot.close()
             return None
-        await interaction.response.send_message("Not allowed", ephemeral=True)
+        await self.reply(interaction, "Not allowed", ephemeral=True)
         return None
 
     @app_commands.command(name="loop", description="Loop current song")
@@ -235,21 +274,28 @@ class MikuMusicCommands(commands.Cog):
     @app_commands.guilds(GUILD_OBJECT)
     async def shuffle(self, interaction: discord.Interaction) -> None:
         if not self.songs_list:
-            await interaction.response.send_message("`Queue empty`")
+            await self.reply(interaction, "`Queue empty`")
             return None
         first_song = [self.songs_list[0]]
-        exl_first = self.songs_list[1:]
+        exl_first = self.songs_list[1:] if len(self.songs_list) > 1 else []
         random.shuffle(exl_first)
         self.songs_list = first_song + exl_first
-        await interaction.response.send_message("`Queue shuffled`")
+        await self.reply(interaction, "`Queue shuffled`")
+        if exl_first:
+            await self.cache_index()
         return None
     @app_commands.command(name="volume", description="Change the volume from 0.00 -> 2.00")
     @app_commands.guilds(GUILD_OBJECT)
     async def set_volume(self, interaction: discord.Interaction, volume: float) -> None:
         if self.source:
+            if volume > 2:
+                await self.reply(interaction, f"`Volume must be less than 2`")
+                return None
             self.source.volume = volume
-        await interaction.response.send_message(f"`Set volume to {volume}!`")
-        self.volume = volume
+            self.volume = volume
+            await interaction.response.send_message(f"`Set volume to {volume}!`")
+            return None
+        await self.reply(interaction, "`No audio source found!`", ephemeral=True)
         return None
 
 
