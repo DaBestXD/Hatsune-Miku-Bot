@@ -202,8 +202,19 @@ def _get_Audio_Source(query: tuple[str|None, ...]) -> str | None:
                 if "spotify" in url:
                     result = ydl.extract_info(title, download=False)
                     entries = result.get("entries")
+                    songs = []
                     if entries:
-                        return entries[0].get("url")
+                        for n in entries:
+                            view_count = n.get("view_count") or 1
+                            url = n.get("url")
+                            songs.append((view_count, url))
+                    max_vc = 0
+                    return_url = None
+                    for vc, url in songs:
+                        if max_vc < vc:
+                            return_url = url
+                            max_vc = vc
+                    return return_url
                 else:
                     result = ydl.extract_info(url=url,download=False)
                     return result.get("url")

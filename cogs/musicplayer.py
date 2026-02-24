@@ -2,8 +2,8 @@ import asyncio
 import discord
 import random
 import io
-from typing import cast
-from discord import FFmpegPCMAudio, InteractionCallbackResponse, PCMVolumeTransformer, VoiceClient, VoiceProtocol, WebhookMessage, app_commands
+from typing import cast, Any
+from discord import FFmpegPCMAudio, InteractionCallbackResponse, Member, PCMVolumeTransformer, TextChannel, VoiceClient, VoiceProtocol, VoiceState, WebhookMessage, app_commands
 from discord.ext import commands
 from botextras.audio_handler import get_Audio_Source, get_Song_Info
 from botextras.constants import GUILD_OBJECT, USER_ID
@@ -18,16 +18,34 @@ class MikuMusicCommands(commands.Cog):
         # tuple first val is song name, second val is song url
         self.songs_list: list[tuple[str,...]] = []
         self.song_cache: dict[str,str] = {}
-        self.playback_status: bool = False
         self.song_loop: bool = False
         self.source: PCMVolumeTransformer | None = None
         self.volume: float = 1.00
         self.last_removed: tuple[str,...] = ()
-        self.stderr_buf = None
-        self.FFMPEG_OPTS: dict[str, str] = {
+        self.FFMPEG_OPTS = cast(Any,{
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
             "options": "-vn",
-        }
+        })
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member: Member, before: VoiceState, after: VoiceState) -> None:
+        if not self.bot.user or member.id != self.bot.user.id:
+            return None
+        if isinstance(member.guild.voice_client, VoiceClient):
+            if not before.channel and after.channel:
+                    print(f"Bot has joined the voice channel: {after.channel}")
+                    self.vc = member.guild.voice_client
+                    return None
+            if before.channel and not after.channel:
+                print(f"Bot has left the voice channel: {before.channel}")
+                self.vc = None
+                self.songs_list = []
+                self.loop = False
+                if self.source:
+                    self.source.cleanup()
+                self.source = None
+        return None
+
     async def cleanup_cache(self, song_url: str)->None:
         #10 minute waiting period
         await asyncio.sleep(600)
@@ -36,8 +54,13 @@ class MikuMusicCommands(commands.Cog):
             self.song_cache.pop(song_url)
         return None
 
+    async def cache_all(self):
+        for idx, _ in enumerate(self.songs_list):
+            await self.cache_index(idx)
+            await asyncio.sleep(60)
+
     async def cache_index(self, idx: int = 1)->None:
-        if len(self.songs_list) < idx + 1 or idx != 0:
+        if len(self.songs_list) < idx + 1 and idx != 0:
             print(f"{self.songs_list} less than {idx}")
             return None
         song_title, song_url = self.songs_list[idx]
@@ -75,106 +98,98 @@ class MikuMusicCommands(commands.Cog):
                 return None
         # returns early if not used in server
         return None
-    async def helper_play_next(self, failed:bool):
-        last_song = True
-        if self.songs_list and not failed:
+
+    async def helper_play_next(self, failed: bool = False):
+        if self.songs_list:
             if not self.song_loop:
                 self.last_removed = self.songs_list[0]
                 self.songs_list.pop(0)
             else:
                 await self.cache_index(idx=0)
-        if failed:
-            self.songs_list.insert(0, self.last_removed)
         if self.songs_list:
-            last_song = False
             song_title, song_url = self.songs_list[0]
-            self.stderr_buf = io.BytesIO()
-            if song_url not in self.song_cache:
+            if song_url not in self.song_cache or failed:
                 ffmpeg_source = await get_Audio_Source((song_title,song_url))
             else:
                 ffmpeg_source = self.song_cache[song_url]
             if ffmpeg_source and self.vc:
-                source = PCMVolumeTransformer(FFmpegPCMAudio(
-                    ffmpeg_source,
-                    before_options=self.FFMPEG_OPTS["before_options"],
-                    options=self.FFMPEG_OPTS["options"],
-                    stderr=self.stderr_buf
-                ),volume=self.volume)
+                stderr_buf = io.BytesIO()
+                pcmaud = FFmpegPCMAudio(ffmpeg_source, **self.FFMPEG_OPTS, stderr=stderr_buf)
+                source = PCMVolumeTransformer(pcmaud,volume=self.volume)
                 self.source = source
-                self.vc.play(source, after=self.playback_callback_func)
+                self.vc.play(
+                    source,
+                    after=lambda error, song_url=song_url, stderr_buf=stderr_buf: self.playback_callback_func(
+                        error,
+                        song_url,
+                        stderr_buf,
+                    ))
                 if self.text_channel:
                     await self.text_channel.send(f"Now playing [{song_title}]({song_url}) !")
-                await self.cache_index()
-            else:
-                # Unable to find ffmpeg source move to next song
-                return self.helper_play_next(failed=False)
-        if self.text_channel and last_song:
+                await self.cache_all()
+        if self.text_channel and not self.songs_list:
             await self.text_channel.send("`Queue empty`")
-            self.playback_status = False
             self.source = None
         return None
 
-    def playback_callback_func(self, error):
+    def playback_callback_func(self, error: Exception | None, song_url: str, stderr_buf: io.BytesIO) -> None:
         failed = False
-        if self.stderr_buf:
-            ffmpeg_error = self.stderr_buf.getvalue().decode("utf-8",errors="ignore")
-            if "403 Forbidden" in ffmpeg_error:
-                if self.last_removed[1] in self.song_cache:
-                    self.song_cache.pop(self.last_removed[1])
-                failed = True
+        ffmpeg_error = stderr_buf.getvalue().decode("utf-8", errors="ignore")
+        if "403 Forbidden" in ffmpeg_error:
+            if song_url in self.song_cache:
+                self.song_cache.pop(song_url)
+            failed = True
         if error:
             print(f"Error occured {error}")
             return None
-        asyncio.run_coroutine_threadsafe(self.helper_play_next(failed), self.bot.loop)
+        asyncio.run_coroutine_threadsafe(self.helper_play_next(failed=failed), self.bot.loop)
         return None
 
     @app_commands.command(name="play", description="Enter song name or song url")
     @app_commands.guilds(GUILD_OBJECT)
     async def play(self, interaction: discord.Interaction, song_name: str) -> None:
         vc: discord.VoiceProtocol | None = await self.join_vc(interaction)
-        if not vc:
+        if not isinstance(vc, VoiceClient):
             return None
         await interaction.response.defer()
-        # VoiceProtocol and VoiceClient effectively the same (maybe true?)
-        # VoiceClient has auto completion for text editors, pyright gets mad otherwise
-        vc = cast(VoiceClient, vc)
-        # set text channel so playnext callback function able to send to correct channel
-        self.text_channel = (cast(discord.TextChannel, interaction.channel) if not self.text_channel else self.text_channel)
+        if isinstance(interaction.channel, TextChannel) and not self.text_channel:
+            self.text_channel = interaction.channel
         song_info = await get_Song_Info(song_name)
         if not song_info:
-            await interaction.followup.send("`Invalid url or song title.`")
+            await self.reply(interaction, "`Invalid url or song title.`")
             return None
-        if len(song_info) > 1:
-            *songs, playlist_info = song_info
-            playlist_name, playlist_link, playlist_count = playlist_info
-            song_title, song_url = songs[0]
-            self.songs_list.extend(songs)
+        song_title, song_url = song_info[0]
+        if len(song_info[-1]) > 2:
+            playlist_name, playlist_link, playlist_count = song_info[-1]
             await self.reply(interaction, f"Added {playlist_count} songs from [{playlist_name}]({playlist_link}) !")
-            if vc.is_playing():
-                return None
-            ffmpeg_source = await get_Audio_Source((song_title,song_url))
+            self.songs_list.extend(song_info[:-1])
         else:
-            song_title, song_url = song_info[0]
-            self.songs_list.extend(song_info)
             await self.reply(interaction, f"Added [{song_title}]({song_url}) to the queue!")
-            if vc.is_playing():
-                return None
+            self.songs_list.extend(song_info)
+        if vc.is_playing():
+            return None
+        if song_url in self.song_cache:
+            ffmpeg_source = self.song_cache[song_url]
+        else:
             ffmpeg_source = await get_Audio_Source((song_title,song_url))
         if ffmpeg_source:
-            source = PCMVolumeTransformer(FFmpegPCMAudio(
-                ffmpeg_source,
-                before_options=self.FFMPEG_OPTS["before_options"],
-                options=self.FFMPEG_OPTS["options"],
-            ),volume=self.volume)
-            self.source = source
-            self.vc = vc
-            vc.play(source, after=self.playback_callback_func)
-            await self.reply(interaction, f"Now playing [{song_title}]({song_url}) !")
-            await self.cache_index()
-            return None
-        else:
-            await self.reply(interaction, "`Something went wrong... try again!`")
-            return None
+            stderr_buf = io.BytesIO()
+            pcmaud = FFmpegPCMAudio(ffmpeg_source, **self.FFMPEG_OPTS, stderr=stderr_buf)
+            source = PCMVolumeTransformer(pcmaud,volume=self.volume)
+            if not vc.is_playing():
+                self.source = source
+                vc.play(
+                    source,
+                    after=lambda error, song_url=song_url, stderr_buf=stderr_buf: self.playback_callback_func(
+                        error,
+                        song_url,
+                        stderr_buf,
+                    ))
+                await self.reply(interaction, f"Now playing [{song_title}]({song_url}) !")
+                asyncio.create_task(self.cache_all())
+                return None
+        await self.reply(interaction, "`Something went wrong... try again!`")
+        return None
 
     @app_commands.command(name="stop", description="Disconnects bot from voice channel")
     @app_commands.guilds(GUILD_OBJECT)
@@ -231,6 +246,7 @@ class MikuMusicCommands(commands.Cog):
         self.song_loop = False
         self.vc.stop()
         await self.reply(interaction, f"```Skipping {self.songs_list[0][0]}```")
+        await self.cache_index()
         return None
 
     @app_commands.command(name="remove", description="Remove song from queue")
@@ -252,6 +268,13 @@ class MikuMusicCommands(commands.Cog):
             await self.reply(interaction, "`User ID was never provided`", ephemeral=True)
             return None
         if interaction.user.id == USER_ID:
+            if self.vc:
+                print("Stopping playable and leaving call")
+                self.songs_list = []
+                if self.source:
+                    self.source.cleanup()
+                self.vc.stop()
+                await self.vc.disconnect(force=True)
             await self.reply(interaction, "`Shutting down...`")
             await self.bot.close()
             return None
