@@ -22,6 +22,7 @@ class MikuMusicCommands(commands.Cog):
         self.source: PCMVolumeTransformer | None = None
         self.volume: float = 1.00
         self.last_removed: tuple[str,...] = ()
+        self.cache_task = None
         self.FFMPEG_OPTS = cast(Any,{
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
             "options": "-vn",
@@ -126,7 +127,6 @@ class MikuMusicCommands(commands.Cog):
                     ))
                 if self.text_channel:
                     await self.text_channel.send(f"Now playing [{song_title}]({song_url}) !")
-                await self.cache_all()
         if self.text_channel and not self.songs_list:
             await self.text_channel.send("`Queue empty`")
             self.source = None
@@ -167,6 +167,9 @@ class MikuMusicCommands(commands.Cog):
             await self.reply(interaction, f"Added [{song_title}]({song_url}) to the queue!")
             self.songs_list.extend(song_info)
         if vc.is_playing():
+            if self.cache_task:
+                self.cache_task.cancel()
+                self.cache_task = asyncio.create_task(self.cache_all())
             return None
         if song_url in self.song_cache:
             ffmpeg_source = self.song_cache[song_url]
@@ -186,7 +189,7 @@ class MikuMusicCommands(commands.Cog):
                         stderr_buf,
                     ))
                 await self.reply(interaction, f"Now playing [{song_title}]({song_url}) !")
-                asyncio.create_task(self.cache_all())
+                self.cache_task = asyncio.create_task(self.cache_all())
                 return None
         await self.reply(interaction, "`Something went wrong... try again!`")
         return None
@@ -305,8 +308,9 @@ class MikuMusicCommands(commands.Cog):
         random.shuffle(exl_first)
         self.songs_list = first_song + exl_first
         await self.reply(interaction, "`Queue shuffled`")
-        if exl_first:
-            await self.cache_index()
+        if exl_first and self.cache_task:
+            self.cache_task.cancel()
+            self.cache_task = asyncio.create_task(self.cache_all())
         return None
     @app_commands.command(name="volume", description="Change the volume from 0.00 -> 2.00")
     @app_commands.guilds(GUILD_OBJECT)
