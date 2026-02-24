@@ -6,7 +6,7 @@ from botextras.constants import DISCORD_TOKEN, GUILD_ID, GUILD_OBJECT
 def main():
     if not DISCORD_TOKEN:
         raise KeyError("Discord Token cannot be none")
-    if not GUILD_ID:
+    if not GUILD_OBJECT:
         raise KeyError("Guild ID cannot be none")
 
     class Bot(commands.Bot):

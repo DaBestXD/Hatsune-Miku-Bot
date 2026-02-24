@@ -34,20 +34,20 @@ def get_token() -> None | str:
     return None
 
 
-def get_Youtube_Info(url: str) -> list[tuple[str|None, ...]] | None:
+def get_Youtube_Info(url: str) -> list[tuple[str,...]] | None:
     try:
         with YoutubeDL(params=YDL_OPTS) as ydl:
             result = ydl.extract_info(url, download=False)
             entries = result.get("entries")
             if entries:
-                songs:list[tuple[str|None, ...]] = []
+                songs:list[tuple[str,...]] = []
                 for n in entries:
                     song_title = n.get("title")
                     song_url = n.get("url")
                     if song_title and song_url:
                         songs.append((song_title,song_url))
-                playlist_title = result.get("title", "Unknown title")
-                playlist_count = result.get("playlist_count", "Unknown count")
+                playlist_title = result.get("title") or "Unknown title"
+                playlist_count = result.get("playlist_count") or "Unknown playlist count"
                 songs.append((playlist_title, url, playlist_count))
                 return songs
             title = result.get("title")
@@ -57,8 +57,8 @@ def get_Youtube_Info(url: str) -> list[tuple[str|None, ...]] | None:
     except DownloadError:
         return None
 
-def sp_multi_helper_func(api_link: str, headers: dict[str,str], params: dict[str,str] | None, path_type: str)-> list[tuple[str|None, ...]] | None:
-    songs: list[tuple[str|None, ...]] = []
+def sp_multi_helper_func(api_link: str, headers: dict[str,str], params: dict[str,str] | None, path_type: str)-> list[tuple[str,...]] | None:
+    songs: list[tuple[str,str]] = []
     while api_link:
         r = requests.get(url=api_link, headers=headers, params=params)
         if r.status_code != 200:
@@ -83,12 +83,13 @@ def sp_multi_helper_func(api_link: str, headers: dict[str,str], params: dict[str
 
 
 # TODO clean this up later
-def get_Spotify_Info(path_type: str, id: str) -> list[tuple[str|None, ...]] | None:
+def get_Spotify_Info(path_type: str, id: str) -> list[tuple[str,...]] | None:
     token = get_token()
     headers = {"Authorization" : f"Bearer {token}"}
     if "/album/" in path_type:
         api_link = SP_ALBUM_LINK + id + "/tracks"
-        album_name, album_count = "Unknown", "-1"
+        album_name: str = "Unknown"
+        album_count: str = "-1"
         params = SP_ALBUM_PARAMS
         songs = sp_multi_helper_func(api_link,headers,params,path_type="album")
         if not songs:
@@ -130,7 +131,7 @@ def get_Spotify_Info(path_type: str, id: str) -> list[tuple[str|None, ...]] | No
     return None
 
 
-def get_Soundcloud_Info(url: str) -> list[tuple[str|None, ...]] | None:
+def get_Soundcloud_Info(url: str) -> list[tuple[str, ...]] | None:
     if re.match(r"(.*sets+.*)(?:\?)", url):
         print("Soundcloud playlists are not accepted")
         return None
@@ -155,24 +156,24 @@ def get_Soundcloud_Info(url: str) -> list[tuple[str|None, ...]] | None:
         print(f"DownloadError: {e}")
 
 
-def search_Query(query: str) -> list[tuple[str, str|None]] | None:
+def search_Query(query: str) -> list[tuple[str, str]] | None:
     try:
         with YoutubeDL(params=YDL_OPTS) as ydl:
             result = ydl.extract_info(query, download=False)
             entries = result.get("entries")
             if entries:
                 for n in entries:
-                    song_url = n.get("url")
+                    song_url = n.get("url", "Unknown url")
                     if "channel" in song_url:
                         continue
-                    song_title = n.get("title")
+                    song_title = n.get("title", "Unknown title")
                     return [(song_title, song_url)]
             else:
                 return None
     except DownloadError as e:
         print(f"DownloadError: {e}") 
 
-def _get_Song_Info(url: str) -> list[tuple[str|None, ...]] | None:
+def _get_Song_Info(url: str) -> list[tuple[str,...]] | None:
     # Filters into two parts domain and other
     grouped_url = re.match(r"(?:https://)([a-z.]+/)(.*)", url)
     if grouped_url is None:

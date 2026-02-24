@@ -16,21 +16,20 @@ class MikuMusicCommands(commands.Cog):
         self.text_channel: discord.TextChannel | None = None
         self.bot: commands.Bot = bot
         # tuple first val is song name, second val is song url
-        self.songs_list: list[tuple[str|None,... ]] = []
+        self.songs_list: list[tuple[str,...]] = []
         self.song_cache: dict[str,str] = {}
         self.playback_status: bool = False
         self.song_loop: bool = False
         self.source: PCMVolumeTransformer | None = None
         self.volume: float = 1.00
-        self.last_removed: tuple[str|None,...]= ()
+        self.last_removed: tuple[str,...] = ()
         self.stderr_buf = None
         self.FFMPEG_OPTS: dict[str, str] = {
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
             "options": "-vn",
         }
-
     async def cleanup_cache(self, song_url: str)->None:
-        print(f"Removing {song_url} in 10 minutes")
+        #10 minute waiting period
         await asyncio.sleep(600)
         if song_url in self.song_cache:
             print(f"Removed {song_url} from cache")
@@ -38,7 +37,7 @@ class MikuMusicCommands(commands.Cog):
         return None
 
     async def cache_index(self, idx: int = 1)->None:
-        if len(self.songs_list) < idx + 1:
+        if len(self.songs_list) < idx + 1 or idx != 0:
             print(f"{self.songs_list} less than {idx}")
             return None
         song_title, song_url = self.songs_list[idx]
@@ -47,7 +46,7 @@ class MikuMusicCommands(commands.Cog):
                 audio_source = await get_Audio_Source((song_title, song_url))
                 if audio_source:
                     self.song_cache[song_url] = audio_source
-                    print(f"Caching {song_title}")
+                    print(f"Caching {song_title} for 10 minutes")
                     asyncio.create_task(self.cleanup_cache(song_url))
             else:
                 print(f"{song_title} already in cache")
@@ -76,17 +75,17 @@ class MikuMusicCommands(commands.Cog):
                 return None
         # returns early if not used in server
         return None
-
-    async def helper_play_next(self, failed :bool=False):
+    async def helper_play_next(self, failed:bool):
         last_song = True
         if self.songs_list and not failed:
             if not self.song_loop:
                 self.last_removed = self.songs_list[0]
                 self.songs_list.pop(0)
+            else:
+                await self.cache_index(idx=0)
         if failed:
             self.songs_list.insert(0, self.last_removed)
         if self.songs_list:
-            await self.cache_index()
             last_song = False
             song_title, song_url = self.songs_list[0]
             self.stderr_buf = io.BytesIO()
@@ -94,7 +93,6 @@ class MikuMusicCommands(commands.Cog):
                 ffmpeg_source = await get_Audio_Source((song_title,song_url))
             else:
                 ffmpeg_source = self.song_cache[song_url]
-                self.song_cache.pop(song_url)
             if ffmpeg_source and self.vc:
                 source = PCMVolumeTransformer(FFmpegPCMAudio(
                     ffmpeg_source,
@@ -106,9 +104,10 @@ class MikuMusicCommands(commands.Cog):
                 self.vc.play(source, after=self.playback_callback_func)
                 if self.text_channel:
                     await self.text_channel.send(f"Now playing [{song_title}]({song_url}) !")
+                await self.cache_index()
             else:
                 # Unable to find ffmpeg source move to next song
-                return self.helper_play_next()
+                return self.helper_play_next(failed=False)
         if self.text_channel and last_song:
             await self.text_channel.send("`Queue empty`")
             self.playback_status = False
@@ -120,6 +119,8 @@ class MikuMusicCommands(commands.Cog):
         if self.stderr_buf:
             ffmpeg_error = self.stderr_buf.getvalue().decode("utf-8",errors="ignore")
             if "403 Forbidden" in ffmpeg_error:
+                if self.last_removed[1] in self.song_cache:
+                    self.song_cache.pop(self.last_removed[1])
                 failed = True
         if error:
             print(f"Error occured {error}")
@@ -293,7 +294,7 @@ class MikuMusicCommands(commands.Cog):
                 return None
             self.source.volume = volume
             self.volume = volume
-            await interaction.response.send_message(f"`Set volume to {volume}!`")
+            await self.reply(interaction, f"`Set volume to {volume}!`")
             return None
         await self.reply(interaction, "`No audio source found!`", ephemeral=True)
         return None
