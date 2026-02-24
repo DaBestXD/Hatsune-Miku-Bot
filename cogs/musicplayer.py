@@ -37,14 +37,14 @@ class MikuMusicCommands(commands.Cog):
                     print(f"Bot has joined the voice channel: {after.channel}")
                     self.vc = member.guild.voice_client
                     return None
-            if before.channel and not after.channel:
-                print(f"Bot has left the voice channel: {before.channel}")
-                self.vc = None
-                self.songs_list = []
-                self.loop = False
-                if self.source:
-                    self.source.cleanup()
-                self.source = None
+        if before.channel and not after.channel:
+            print(f"Bot has left the voice channel: {before.channel}")
+            self.vc = None
+            self.songs_list = []
+            self.song_loop = False
+            if self.source:
+                self.source.cleanup()
+            self.source = None
         return None
 
     async def cleanup_cache(self, song_url: str)->None:
@@ -56,14 +56,20 @@ class MikuMusicCommands(commands.Cog):
         return None
 
     async def cache_all(self):
-        for idx, _ in enumerate(self.songs_list):
-            await self.cache_index(idx)
-            await asyncio.sleep(60)
+        try:
+            if len(self.songs_list) > 1:
+                for idx, _ in enumerate(self.songs_list):
+                    if not await self.cache_index(idx):
+                        continue
+                    await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            pass
 
-    async def cache_index(self, idx: int = 1)->None:
+    async def cache_index(self, idx: int = 1)->bool:
+        if not self.songs_list:
+            return False
         if len(self.songs_list) < idx + 1 and idx != 0:
-            print(f"{self.songs_list} less than {idx}")
-            return None
+            return False
         song_title, song_url = self.songs_list[idx]
         if song_title and song_url:
             if song_url not in self.song_cache:
@@ -72,9 +78,10 @@ class MikuMusicCommands(commands.Cog):
                     self.song_cache[song_url] = audio_source
                     print(f"Caching {song_title} for 10 minutes")
                     asyncio.create_task(self.cleanup_cache(song_url))
+                    return True
             else:
                 print(f"{song_title} already in cache")
-        return None
+        return False
 
     async def reply(self, interaction: discord.Interaction, msg: str, **kwargs)-> WebhookMessage | InteractionCallbackResponse:
         if interaction.response.is_done():
@@ -118,15 +125,16 @@ class MikuMusicCommands(commands.Cog):
                 pcmaud = FFmpegPCMAudio(ffmpeg_source, **self.FFMPEG_OPTS, stderr=stderr_buf)
                 source = PCMVolumeTransformer(pcmaud,volume=self.volume)
                 self.source = source
-                self.vc.play(
-                    source,
-                    after=lambda error, song_url=song_url, stderr_buf=stderr_buf: self.playback_callback_func(
-                        error,
-                        song_url,
-                        stderr_buf,
-                    ))
-                if self.text_channel:
-                    await self.text_channel.send(f"Now playing [{song_title}]({song_url}) !")
+                if not self.vc.is_playing():
+                    self.vc.play(
+                        source,
+                        after=lambda error, song_url=song_url, stderr_buf=stderr_buf: self.playback_callback_func(
+                            error,
+                            song_url,
+                            stderr_buf,
+                        ))
+                    if self.text_channel:
+                        await self.text_channel.send(f"Now playing [{song_title}]({song_url}) !")
         if self.text_channel and not self.songs_list:
             await self.text_channel.send("`Queue empty`")
             self.source = None
@@ -141,7 +149,6 @@ class MikuMusicCommands(commands.Cog):
             failed = True
         if error:
             print(f"Error occured {error}")
-            return None
         asyncio.run_coroutine_threadsafe(self.helper_play_next(failed=failed), self.bot.loop)
         return None
 
@@ -169,7 +176,7 @@ class MikuMusicCommands(commands.Cog):
         if vc.is_playing():
             if self.cache_task:
                 self.cache_task.cancel()
-                self.cache_task = asyncio.create_task(self.cache_all())
+            self.cache_task = asyncio.create_task(self.cache_all())
             return None
         if song_url in self.song_cache:
             ffmpeg_source = self.song_cache[song_url]
@@ -213,7 +220,6 @@ class MikuMusicCommands(commands.Cog):
     async def clear(self, interaction: discord.Interaction) -> None:
         if self.vc:
             self.vc.stop()
-            self.vc = None
             self.song_loop = False
             self.songs_list = []
             self.source = None
@@ -236,6 +242,7 @@ class MikuMusicCommands(commands.Cog):
                     queue_str += "--> " + song + " <-- Currently playing" + "\n"
                 else:
                     queue_str += str(idx) + ". " + song + "\n"
+        queue_str += f"Looping: {self.song_loop}, Songs in queue: {len(self.songs_list)}"
         queue_str += "```"
         await self.reply(interaction, queue_str)
         return None
@@ -246,6 +253,8 @@ class MikuMusicCommands(commands.Cog):
         if not self.vc:
             await self.reply(interaction, "`Not in a voice channel`", ephemeral=True)
             return None
+        if not self.songs_list:
+            await self.reply(interaction, "`Queue empty!`")
         self.song_loop = False
         self.vc.stop()
         await self.reply(interaction, f"```Skipping {self.songs_list[0][0]}```")
@@ -310,7 +319,7 @@ class MikuMusicCommands(commands.Cog):
         await self.reply(interaction, "`Queue shuffled`")
         if exl_first and self.cache_task:
             self.cache_task.cancel()
-            self.cache_task = asyncio.create_task(self.cache_all())
+        self.cache_task = asyncio.create_task(self.cache_all())
         return None
     @app_commands.command(name="volume", description="Change the volume from 0.00 -> 2.00")
     @app_commands.guilds(GUILD_OBJECT)
