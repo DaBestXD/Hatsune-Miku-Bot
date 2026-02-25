@@ -170,18 +170,20 @@ def search_Query(query: str) -> list[tuple[str, str]] | None:
                     song_title = n.get("title") or "Unknown title"
                     view_count = n.get("view_count") or 1
                     songs.append((view_count, song_url, song_title))
-                max_vc = 0
-                _, song_title, song_url = songs[0]
-                for vc, url, song_title in songs:
-                    if max_vc < vc:
-                        song_url = url
-                        max_vc = vc
-                        song_title = song_title
-                return [(song_title, song_url)]
+                if songs:
+                    max_vc = 0
+                    _, song_title, song_url = songs[0]
+                    for vc, url, song_title in songs:
+                        if max_vc < vc:
+                            song_url = url
+                            max_vc = vc
+                            song_title = song_title
+                    return [(song_title, song_url)]
             else:
                 return None
     except DownloadError as e:
-        print(f"DownloadError: {e}") 
+        print(f"DownloadError: {e}")
+        return None
 
 def _get_Song_Info(url: str) -> list[tuple[str,...]] | None:
     # Filters into two parts domain and other

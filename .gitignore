@@ -10,3 +10,6 @@
 *pyrightconfig.json
 *lazyrun.sh
 *.markdownlint.json
+*prodbotenv.txt
+*Dockerfile
+*.dockerignore

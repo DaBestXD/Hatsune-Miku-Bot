@@ -66,8 +66,8 @@ class MikuMusicCommands(commands.Cog):
                     await asyncio.sleep(30)
             elif len(self.songs_list) == 1:
                 await self.cache_index(0)
-        except asyncio.CancelledError as e:
-            print(f"Asyncio error: {e}")
+        except asyncio.CancelledError:
+            print("Cache_all cancelled")
             pass
 
     async def cache_index(self, idx: int = 1)->bool:
@@ -125,6 +125,12 @@ class MikuMusicCommands(commands.Cog):
                 ffmpeg_source = await get_Audio_Source((song_title,song_url))
             else:
                 ffmpeg_source = self.song_cache[song_url]
+            if not ffmpeg_source:
+                if self.text_channel:
+                    await self.text_channel.send(f"Unable to find audio source for [{song_title}]({song_url}) ! Skipping...")
+                print(f"Bad source for {song_title}, {self.songs_list[0][1]}")
+                self.songs_list.pop(0)
+                return await self.helper_play_next()
             if ffmpeg_source and self.vc:
                 stderr_buf = io.BytesIO()
                 pcmaud = FFmpegPCMAudio(ffmpeg_source, **self.FFMPEG_OPTS, stderr=stderr_buf)
@@ -182,6 +188,7 @@ class MikuMusicCommands(commands.Cog):
         if vc.is_playing():
             if self.cache_task:
                 self.cache_task.cancel()
+                await self.cache_task
             self.cache_task = asyncio.create_task(self.cache_all())
             return None
         if song_url in self.song_cache:
@@ -249,7 +256,7 @@ class MikuMusicCommands(commands.Cog):
                     queue_str += "--> " + song + " <-- Currently playing" + "\n"
                 else:
                     queue_str += str(idx) + ". " + song + "\n"
-        queue_str += f"Looping: {self.song_loop}, Songs in queue: {len(self.songs_list)}"
+        queue_str += f"Looping current song: {self.song_loop}, Songs in queue: {len(self.songs_list)}"
         queue_str += "```"
         await self.reply(interaction, queue_str)
         return None
@@ -262,10 +269,14 @@ class MikuMusicCommands(commands.Cog):
             return None
         if not self.songs_list:
             await self.reply(interaction, "`Queue empty!`")
+            return None
         self.song_loop = False
         self.vc.stop()
         await self.reply(interaction, f"```Skipping {self.songs_list[0][0]}```")
-        await self.cache_index()
+        if self.cache_task:
+            self.cache_task.cancel()
+            await self.cache_task
+        self.cache_task = asyncio.create_task(self.cache_all())
         return None
 
     @app_commands.command(name="remove", description="Remove song from queue")
@@ -326,6 +337,7 @@ class MikuMusicCommands(commands.Cog):
         await self.reply(interaction, "`Queue shuffled`")
         if exl_first and self.cache_task:
             self.cache_task.cancel()
+            await self.cache_task
         self.cache_task = asyncio.create_task(self.cache_all())
         return None
     @app_commands.command(name="volume", description="Change the volume from 0.00 -> 2.00")
