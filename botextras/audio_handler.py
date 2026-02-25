@@ -162,12 +162,22 @@ def search_Query(query: str) -> list[tuple[str, str]] | None:
             result = ydl.extract_info(query, download=False)
             entries = result.get("entries")
             if entries:
+                songs = []
                 for n in entries:
-                    song_url = n.get("url", "Unknown url")
-                    if "channel" in song_url:
+                    song_url = n.get("url") or "Unknown url"
+                    if "channel/" in song_url:
                         continue
-                    song_title = n.get("title", "Unknown title")
-                    return [(song_title, song_url)]
+                    song_title = n.get("title") or "Unknown title"
+                    view_count = n.get("view_count") or 1
+                    songs.append((view_count, song_url, song_title))
+                max_vc = 0
+                _, song_title, song_url = songs[0]
+                for vc, url, song_title in songs:
+                    if max_vc < vc:
+                        song_url = url
+                        max_vc = vc
+                        song_title = song_title
+                return [(song_title, song_url)]
             else:
                 return None
     except DownloadError as e:
@@ -214,9 +224,11 @@ def _get_Audio_Source(query: tuple[str|None, ...]) -> str | None:
                         if max_vc < vc:
                             return_url = url
                             max_vc = vc
+                    print(f"Loaded audio for: {title}")
                     return return_url
                 else:
                     result = ydl.extract_info(url=url,download=False)
+                    print(f"Loaded audio for: {title}")
                     return result.get("url")
             return None
     except DownloadError as e:

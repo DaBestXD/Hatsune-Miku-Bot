@@ -48,21 +48,26 @@ class MikuMusicCommands(commands.Cog):
         return None
 
     async def cleanup_cache(self, song_url: str)->None:
-        #10 minute waiting period
-        await asyncio.sleep(600)
+        #60 minute waiting period
+        await asyncio.sleep(6000)
         if song_url in self.song_cache:
             print(f"Removed {song_url} from cache")
             self.song_cache.pop(song_url)
         return None
 
-    async def cache_all(self):
+    async def cache_all(self, song_url: str|None = None, audio_source: str|None = None):
         try:
+            if song_url and audio_source:
+                self.song_cache[song_url] = audio_source
             if len(self.songs_list) > 1:
                 for idx, _ in enumerate(self.songs_list):
                     if not await self.cache_index(idx):
                         continue
-                    await asyncio.sleep(60)
-        except asyncio.CancelledError:
+                    await asyncio.sleep(30)
+            elif len(self.songs_list) == 1:
+                await self.cache_index(0)
+        except asyncio.CancelledError as e:
+            print(f"Asyncio error: {e}")
             pass
 
     async def cache_index(self, idx: int = 1)->bool:
@@ -76,7 +81,7 @@ class MikuMusicCommands(commands.Cog):
                 audio_source = await get_Audio_Source((song_title, song_url))
                 if audio_source:
                     self.song_cache[song_url] = audio_source
-                    print(f"Caching {song_title} for 10 minutes")
+                    print(f"Caching {song_title} for 60 minutes")
                     asyncio.create_task(self.cleanup_cache(song_url))
                     return True
             else:
@@ -145,6 +150,7 @@ class MikuMusicCommands(commands.Cog):
         ffmpeg_error = stderr_buf.getvalue().decode("utf-8", errors="ignore")
         if "403 Forbidden" in ffmpeg_error:
             if song_url in self.song_cache:
+                print(f"Stale audio source for {song_url} removing from cache")
                 self.song_cache.pop(song_url)
             failed = True
         if error:
@@ -179,6 +185,7 @@ class MikuMusicCommands(commands.Cog):
             self.cache_task = asyncio.create_task(self.cache_all())
             return None
         if song_url in self.song_cache:
+            print(f"Pulling {song_title} from cache")
             ffmpeg_source = self.song_cache[song_url]
         else:
             ffmpeg_source = await get_Audio_Source((song_title,song_url))
@@ -196,7 +203,7 @@ class MikuMusicCommands(commands.Cog):
                         stderr_buf,
                     ))
                 await self.reply(interaction, f"Now playing [{song_title}]({song_url}) !")
-                self.cache_task = asyncio.create_task(self.cache_all())
+                self.cache_task = asyncio.create_task(self.cache_all(song_url=song_url,audio_source=ffmpeg_source))
                 return None
         await self.reply(interaction, "`Something went wrong... try again!`")
         return None
