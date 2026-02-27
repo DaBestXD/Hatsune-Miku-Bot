@@ -8,7 +8,7 @@ from botextras.config import ENV_PATH
 load_env_vals()
 load_dotenv(dotenv_path=ENV_PATH)
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-GUILD_ID = (os.getenv("GUILD_ID"))
+GUILD_ID = os.getenv("GUILD_ID")
 assert GUILD_ID, "Guild ID cannot be none"
 assert DISCORD_TOKEN, "Discord token cannot be none"
 USER_ID = os.getenv("USER_ID")
@@ -34,6 +34,10 @@ AUDIO_OPTS = cast(Any,{
     "remote_components": ["ejs:github"],
     "noplaylist" : True,
     "quiet" : True,
+})
+FFMPEG_OPTS = cast(Any,{
+    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+    "options": "-vn",
 })
 SP_PLAYLIST_PARAMS = {"market": "US","fields": "items(track(name,artists(name),external_urls(spotify))),next,total",}
 SP_ALBUM_PARAMS = {"market": "US","fields": "items(name,artists(name),external_urls(spotify)),next,total",}

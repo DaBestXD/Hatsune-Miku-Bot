@@ -1,9 +1,10 @@
 import asyncio
+import logging
 import discord
 import random
 import io
 from typing import cast, Any
-from discord import FFmpegPCMAudio, InteractionCallbackResponse, Member, PCMVolumeTransformer, TextChannel, VoiceClient, VoiceProtocol, VoiceState, WebhookMessage, app_commands
+from discord import FFmpegPCMAudio, Guild, InteractionCallbackResponse, Member, PCMVolumeTransformer, TextChannel, VoiceClient, VoiceProtocol, VoiceState, WebhookMessage, app_commands
 from discord.ext import commands
 from botextras.audio_handler import get_Audio_Source, get_Song_Info
 from botextras.constants import GUILD_OBJECT, USER_ID
@@ -12,6 +13,7 @@ from botextras.constants import GUILD_OBJECT, USER_ID
 # TODO add logger
 class MikuMusicCommands(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
+        self.logger = logging.getLogger(self.__class__.__name__)
         self.vc: discord.VoiceClient | None = None
         self.text_channel: discord.TextChannel | None = None
         self.bot: commands.Bot = bot
@@ -23,10 +25,12 @@ class MikuMusicCommands(commands.Cog):
         self.volume: float = 1.00
         self.last_removed: tuple[str,...] = ()
         self.cache_task = None
+        self.botguilds:list[Guild] = [n for n in self.bot.guilds]
         self.FFMPEG_OPTS = cast(Any,{
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
             "options": "-vn",
         })
+
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: Member, before: VoiceState, after: VoiceState) -> None:
@@ -34,11 +38,11 @@ class MikuMusicCommands(commands.Cog):
             return None
         if isinstance(member.guild.voice_client, VoiceClient):
             if not before.channel and after.channel:
-                    print(f"Bot has joined the voice channel: {after.channel}")
+                    self.logger.info("Bot has joined the voice channel: %s", after.channel)
                     self.vc = member.guild.voice_client
                     return None
         if before.channel and not after.channel:
-            print(f"Bot has left the voice channel: {before.channel}")
+            self.logger.info("Bot has left the voice channel: %s", before.channel)
             self.vc = None
             self.songs_list = []
             self.song_loop = False
@@ -165,7 +169,7 @@ class MikuMusicCommands(commands.Cog):
         return None
 
     @app_commands.command(name="play", description="Enter song name or song url")
-    @app_commands.guilds(GUILD_OBJECT)
+    @app_commands.guilds(GUILD_OBJECT, discord.Object(id=1476597945540280502))
     async def play(self, interaction: discord.Interaction, song_name: str) -> None:
         vc: discord.VoiceProtocol | None = await self.join_vc(interaction)
         if not isinstance(vc, VoiceClient):
@@ -216,7 +220,7 @@ class MikuMusicCommands(commands.Cog):
         return None
 
     @app_commands.command(name="stop", description="Disconnects bot from voice channel")
-    @app_commands.guilds(GUILD_OBJECT)
+    @app_commands.guilds(GUILD_OBJECT, discord.Object(id=1476597945540280502))
     async def stop(self, interaction: discord.Interaction) -> None:
         if not self.vc:
             await self.reply(interaction, "`Not in a voice channel!`")
@@ -230,7 +234,7 @@ class MikuMusicCommands(commands.Cog):
         return None
 
     @app_commands.command(name="clear", description="Clears music queue")
-    @app_commands.guilds(GUILD_OBJECT)
+    @app_commands.guilds(GUILD_OBJECT, discord.Object(id=1476597945540280502))
     async def clear(self, interaction: discord.Interaction) -> None:
         if self.vc:
             self.vc.stop()
@@ -244,7 +248,7 @@ class MikuMusicCommands(commands.Cog):
             return None
 
     @app_commands.command(name="queue", description="Gets song queue")
-    @app_commands.guilds(GUILD_OBJECT)
+    @app_commands.guilds(GUILD_OBJECT, discord.Object(id=1476597945540280502))
     async def queue(self, interaction: discord.Interaction) -> None:
         if not self.songs_list:
             await self.reply(interaction, "`Queue empty`")
@@ -262,7 +266,7 @@ class MikuMusicCommands(commands.Cog):
         return None
 
     @app_commands.command(name="skip", description="Skips current song")
-    @app_commands.guilds(GUILD_OBJECT)
+    @app_commands.guilds(GUILD_OBJECT, discord.Object(id=1476597945540280502))
     async def skip(self, interaction: discord.Interaction) -> None:
         if not self.vc:
             await self.reply(interaction, "`Not in a voice channel`", ephemeral=True)
@@ -280,7 +284,7 @@ class MikuMusicCommands(commands.Cog):
         return None
 
     @app_commands.command(name="remove", description="Remove song from queue")
-    @app_commands.guilds(GUILD_OBJECT)
+    @app_commands.guilds(GUILD_OBJECT, discord.Object(id=1476597945540280502))
     async def removeFromQueue(self, interaction: discord.Interaction, index: int) -> None:
         try:
             if index == 0:
@@ -292,7 +296,7 @@ class MikuMusicCommands(commands.Cog):
         return None
 
     @app_commands.command(name="die", description="Shuts down bot")
-    @app_commands.guilds(GUILD_OBJECT)
+    @app_commands.guilds(GUILD_OBJECT, discord.Object(id=1476597945540280502))
     async def die(self, interaction: discord.Interaction) -> None:
         if not USER_ID:
             await self.reply(interaction, "`User ID was never provided`", ephemeral=True)
@@ -312,7 +316,7 @@ class MikuMusicCommands(commands.Cog):
         return None
 
     @app_commands.command(name="loop", description="Loop current song")
-    @app_commands.guilds(GUILD_OBJECT)
+    @app_commands.guilds(GUILD_OBJECT, discord.Object(id=1476597945540280502))
     async def loopSong(self, interaction: discord.Interaction) -> None:
         if not self.vc:
             await interaction.response.send_message("`Not in a voice channel!`", ephemeral=True)
@@ -325,7 +329,7 @@ class MikuMusicCommands(commands.Cog):
         await interaction.response.send_message("`No longer looping current song!`")
         return None
     @app_commands.command(name="shuffle", description="Shuffles the queue")
-    @app_commands.guilds(GUILD_OBJECT)
+    @app_commands.guilds(GUILD_OBJECT, discord.Object(id=1476597945540280502))
     async def shuffle(self, interaction: discord.Interaction) -> None:
         if not self.songs_list:
             await self.reply(interaction, "`Queue empty`")
@@ -341,7 +345,7 @@ class MikuMusicCommands(commands.Cog):
         self.cache_task = asyncio.create_task(self.cache_all())
         return None
     @app_commands.command(name="volume", description="Change the volume from 0.00 -> 2.00")
-    @app_commands.guilds(GUILD_OBJECT)
+    @app_commands.guilds(GUILD_OBJECT, discord.Object(id=1476597945540280502))
     async def set_volume(self, interaction: discord.Interaction, volume: float) -> None:
         if self.source:
             if volume > 2:

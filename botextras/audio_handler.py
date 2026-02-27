@@ -1,3 +1,4 @@
+import logging
 import re
 import requests
 import base64
@@ -10,6 +11,7 @@ from botextras.constants import (CLIENT_ID,
     SP_PLAYLIST_META_PARAMS, SP_PLAYLIST_PARAMS, YDL_OPTS,
     YOUTUBE, SOUNDCLOUD, SPOTIFY, SP_ALBUM_LINK,
     SP_TRACK_LINK, SP_PLAYLIST_LINK,AUDIO_OPTS)
+logger = logging.getLogger(__name__)
 
 def get_token() -> None | str:
     # Silent fail if no provided spotify client id or secret
@@ -30,7 +32,7 @@ def get_token() -> None | str:
     if token_res.status_code == 200:
         token = token_res.json()["access_token"]
         return token
-    print(f"Token collection returned: {token_res.reason}:{token_res.status_code}")
+    logger.warning("[%s]: %d", token_res.reason, token_res.status_code)
     return None
 
 
@@ -62,12 +64,12 @@ def sp_multi_helper_func(api_link: str, headers: dict[str,str], params: dict[str
     while api_link:
         r = requests.get(url=api_link, headers=headers, params=params)
         if r.status_code != 200:
-            print(f"Spotify error: {r.status_code}")
+            logger.warning("Sp_multi_helpfunc http error: [%d]", r.status_code)
             return None
         song_json = r.json()
         items = song_json.get("items")
         if not items:
-            print(f"Something bad happen trying to get the items of {api_link}")
+            logger.warning("Sp_multi_helpfunc Error trying to get items for: %s", api_link)
             return None
         if path_type == "album":
             songs.extend([(item["name"] + " - " +
@@ -120,7 +122,7 @@ def get_Spotify_Info(path_type: str, id: str) -> list[tuple[str,...]] | None:
         params = {"market": "US"}
         r = requests.get(url=api_link, headers=headers, params=params)
         if r.status_code != 200:
-            print(f"Spotify error: {r.status_code}")
+            logger.warning("Spotify http error [%d]", r.status_code)
             return None
         song_json = r.json()
         song_url = song_json["external_urls"]["spotify"]
@@ -133,7 +135,7 @@ def get_Spotify_Info(path_type: str, id: str) -> list[tuple[str,...]] | None:
 
 def get_Soundcloud_Info(url: str) -> list[tuple[str, ...]] | None:
     if re.match(r"(.*sets+.*)(?:\?)", url):
-        print("Soundcloud playlists are not accepted")
+        logger.info("Soundcloud playlist was entered")
         return None
     try:
         with YoutubeDL(params=YDL_OPTS) as ydl:
@@ -147,13 +149,13 @@ def get_Soundcloud_Info(url: str) -> list[tuple[str, ...]] | None:
                     if "http_mp3" in key["format_id"]:
                         restricted = False
                 if restricted:
-                    print("Unable to retrieve soundcloud http_mp3")
+                    logger.warning("Unable to retrieve soundcloud http_mp3")
                     return None
                 return [(title, url)]
-            print("Regex bad something something")
+            logger.warning("Regex failed in soundcloud info")
             return None
     except DownloadError as e:
-        print(f"DownloadError: {e}")
+        logger.warning("Soundcloud download error: %s", e)
 
 
 def search_Query(query: str) -> list[tuple[str, str]] | None:
@@ -179,10 +181,12 @@ def search_Query(query: str) -> list[tuple[str, str]] | None:
                             max_vc = vc
                             song_title = song_title
                     return [(song_title, song_url)]
+                logger.warning("Search_query failed to get song info")
             else:
+                logger.warning("Failed to return a search result")
                 return None
     except DownloadError as e:
-        print(f"DownloadError: {e}")
+        logger.warning("Search query download error: %s", e)
         return None
 
 def _get_Song_Info(url: str) -> list[tuple[str,...]] | None:
@@ -209,9 +213,9 @@ async def get_Song_Info(url: str):
 def _get_Audio_Source(query: tuple[str|None, ...]) -> str | None:
     try:
         with YoutubeDL(AUDIO_OPTS) as ydl:
-            title, url = query
-            if title and url:
-                if "spotify" in url:
+            title, og_url = query
+            if title and og_url:
+                if "spotify" in og_url:
                     result = ydl.extract_info(title, download=False)
                     entries = result.get("entries")
                     songs = []
@@ -219,22 +223,28 @@ def _get_Audio_Source(query: tuple[str|None, ...]) -> str | None:
                         for n in entries:
                             view_count = n.get("view_count") or 1
                             url = n.get("url")
-                            songs.append((view_count, url))
+                            yt_url = n.get("webpage_url")
+                            songs.append((view_count, url, yt_url))
                     max_vc = 0
-                    return_url = None
-                    for vc, url in songs:
+                    return_url:None|str = None
+                    yt_url = ""
+                    for vc, url, yt_url in songs:
                         if max_vc < vc:
                             return_url = url
                             max_vc = vc
-                    print(f"Loaded audio for: {title}")
+                            yt_url = yt_url
+                    logger_url = yt_url
+                    if return_url:
+                        logger_url = yt_url.replace("https://", "")
+                    logger.info("Loaded audio for spotify link: %s, %s", title , logger_url)
                     return return_url
                 else:
-                    result = ydl.extract_info(url=url,download=False)
-                    print(f"Loaded audio for: {title}")
+                    result = ydl.extract_info(url=og_url,download=False)
+                    logger.info("Loaded audio for non-spotify link: %s, %s", title ,og_url.replace("https://", ""))
                     return result.get("url")
             return None
     except DownloadError as e:
-        print(f"Download error: {e}")
+        logger.warning("Audio source download error: %s", e)
         return None
 async def get_Audio_Source(query: tuple[str|None, ...]):
     return await asyncio.to_thread(_get_Audio_Source, query)
