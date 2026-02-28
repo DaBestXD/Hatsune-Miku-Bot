@@ -19,9 +19,8 @@ class Bot(commands.Bot):
     async def on_guild_join(self, guild: discord.Guild) -> None:
         self.logger.info("Joined: %s", guild.name)
         try:
-            self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
-            self.logger.info("Synced commands to: %s[%d]", guild.name, guild.id)
+            self.logger.info("Synced guild-scoped commands to: %s[%d]", guild.name, guild.id)
         except discord.Forbidden:
             self.logger.warning("No permission to sync in guild %s, (%d)", guild.name, guild.id)
         except discord.HTTPException as e:
@@ -33,7 +32,7 @@ class Bot(commands.Bot):
 
     async def setup_hook(self) -> None:
         await self.load_extension("cogs.musicplayer")
-        await self.load_extension("cogs.debugger")
+        # await self.load_extension("cogs.debugger")
         for ext in self.extensions:
             self.logger.info("Loaded %s", ext)
         self.tree.on_error = self.on_app_command_error
@@ -43,6 +42,11 @@ class Bot(commands.Bot):
         if self.user:
             for g in self.guilds:
                 self.logger.info("Logged in as %s on %s[%d]", self.user, g.name, g.id)
+        if not self.synced:
+            for g in self.guilds:
+                await self.tree.sync(guild=g)
+                self.logger.info("Synced guild command set for %s[%d]", g.name, g.id)
+            self.synced = True
         self.logger.info("Ready to go!😼")
         return None
 

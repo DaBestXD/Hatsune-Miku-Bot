@@ -11,11 +11,6 @@ class botDebugger(commands.Cog):
         self.bot: commands.Bot = bot
         self.logger = logging.getLogger(__class__.__name__)
 
-    async def cog_load(self):
-        for g in self.bot.guilds:
-            await self.bot.tree.sync(guild=g)
-            self.logger.info("Resyncing commands to %s", g.name)
-
     async def reply(self, interaction: discord.Interaction, msg: str, **kwargs)-> WebhookMessage | InteractionCallbackResponse:
         if interaction.response.is_done():
             return await interaction.followup.send(msg, **kwargs)
@@ -40,9 +35,10 @@ class botDebugger(commands.Cog):
     async def reload_cog(self, interaction: Interaction, cog_name: str):
         strcog = f"cogs.{cog_name}"
         if strcog in self.bot.extensions:
+            await self.bot.reload_extension(strcog)
+            await self.bot.tree.sync()
             for g in self.bot.guilds:
                 await self.bot.tree.sync(guild=g)
-            await self.bot.reload_extension(strcog)
             await self.reply(interaction, f"`Reloading {strcog}`")
         else:
             strsli :list[str] = []
