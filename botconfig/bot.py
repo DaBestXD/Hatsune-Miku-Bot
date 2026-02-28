@@ -50,6 +50,9 @@ class Bot(commands.Bot):
                 await self.tree.sync(guild=g)
                 self.logger.info("Syncing commands to %s[%d]", g.name, g.id)
             self.synced = True
+        else:
+            self.logger.info("Commands already synced to guilds")
+        self.logger.info("Ready to go!😼")
         return None
 
     async def on_app_command_error(self, interaction: Interaction, error: AppCommandError) -> None:
