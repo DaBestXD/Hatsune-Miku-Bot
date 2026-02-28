@@ -1,9 +1,12 @@
 # Created by venv; see https://docs.python.org/3/library/venv.html
+*EnvHatsuneMiku
 *HatsuneMikuENV
 *__pycache__
 *.HatsuneMikuENV
 *audio_files
 *.env
+*.env.prod
+*.env.dev
 *old_files
 *commandsync.py
 *test.py
@@ -13,3 +16,5 @@
 *prodbotenv.txt
 *Dockerfile
 *.dockerignore
+*old_cogs
+*bot.log
