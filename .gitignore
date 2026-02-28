@@ -5,6 +5,8 @@
 *.HatsuneMikuENV
 *audio_files
 *.env
+*.env.prod
+*.env.dev
 *old_files
 *commandsync.py
 *test.py

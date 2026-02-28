@@ -6,7 +6,6 @@ import io
 from discord import Guild, Member, PCMVolumeTransformer, TextChannel, User, VoiceClient, VoiceProtocol, VoiceState, app_commands
 from discord.ext import commands
 from botextras.audio_handler import get_Audio_Source, get_Song_Info
-from botextras.constants import GUILD_OBJECT
 from botextras.bot_funcs_ext import reply, build_audio
 
 
@@ -122,13 +121,15 @@ class GuildPlaybackState():
         self.song_loop = False
         if self.source:
             self.source.cleanup()
-        if self.vc and self.vc.is_playing():
-            self.vc.stop()
+        if self.vc:
+            if self.vc.is_playing():
+                self.vc.stop()
             if leave_vc:
                 await self.vc.disconnect()
         self.source = None
         self.volume = 1.00
         self.vc = None
+
     async def override_task(self) -> None:
         if self.cache_task:
             self.cache_task.cancel()
@@ -148,12 +149,12 @@ class reMikuMusicCommands(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild: Guild) -> None:
-        self.logger.info("Bot removed from %s", guild.name)
+        self.logger.info("Removed %s[%d] from GuildPlaybackState", guild.name, guild.id)
         self.guildpback_dict.pop(guild.id, None)
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: Guild) -> None:
-        self.logger.info("Bot joined %s", guild.name)
+        self.logger.info("Added %s[%d] to GuildPlaybackState", guild.name, guild.id)
         self.guildpback_dict.setdefault(guild.id, GuildPlaybackState(guild.id))
 
     @commands.Cog.listener()
@@ -191,7 +192,7 @@ class reMikuMusicCommands(commands.Cog):
         guild = interaction.guild
         user = interaction.user
         if not guild or isinstance(user, User):
-            self.logger.warning("Command used in dm by: %s[%s]", user.name, user.id)
+            self.logger.warning("Command used in dm by: %s[%d]", user.name, user.id)
             await reply(interaction, "Erm bot does not work in dms...How did you even add the bot to a dm 😹")
             return None
         if interaction.guild_id not in self.guildpback_dict:
