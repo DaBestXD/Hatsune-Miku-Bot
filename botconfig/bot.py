@@ -32,26 +32,17 @@ class Bot(commands.Bot):
             self.logger.exception("Unexpected sync error guild: %s, (%d)", guild.name, guild.id)
 
     async def setup_hook(self) -> None:
-        # await self.load_extension("cogs.musicplayer")
+        await self.load_extension("cogs.musicplayer")
         await self.load_extension("cogs.debugger")
-        await self.load_extension("cogs.rewrite")
         for ext in self.extensions:
             self.logger.info("Loaded %s", ext)
         self.tree.on_error = self.on_app_command_error
+        await self.tree.sync()
 
     async def on_ready(self) -> None:
         if self.user:
             for g in self.guilds:
                 self.logger.info("Logged in as %s on %s[%d]", self.user, g.name, g.id)
-        if not self.synced:
-            # await self.tree.sync()
-            # For remove all guild specific syncs for prod
-            for g in self.guilds:
-                await self.tree.sync(guild=g)
-                self.logger.info("Syncing commands to %s[%d]", g.name, g.id)
-            self.synced = True
-        else:
-            self.logger.info("Commands already synced to guilds")
         self.logger.info("Ready to go!😼")
         return None
 

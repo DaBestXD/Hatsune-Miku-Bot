@@ -213,7 +213,7 @@ def _get_Audio_Source(query: tuple[str,str]) -> str | None:
         with YoutubeDL(AUDIO_OPTS) as ydl:
             title, og_url = query
             if "spotify" in og_url:
-                result = ydl.extract_info(title, download=False)
+                result = ydl.extract_info(f"ytsearch2:{title}", download=False)
                 entries = result.get("entries")
                 songs = []
                 if entries:
@@ -233,6 +233,9 @@ def _get_Audio_Source(query: tuple[str,str]) -> str | None:
                 return result.get("url")
     except DownloadError as e:
         logger.error("Audio source download error: %s", e)
+        return None
+    except Exception as e:
+        logger.error("Audio failed in expected way: %s", e)
         return None
 async def get_Audio_Source(query: tuple[str,str]):
     return await asyncio.to_thread(_get_Audio_Source, query)
