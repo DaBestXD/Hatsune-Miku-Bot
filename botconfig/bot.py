@@ -1,3 +1,4 @@
+from __future__ import annotations
 import logging
 import discord
 from discord.app_commands import CheckFailure
@@ -14,7 +15,7 @@ class Bot(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.voice_states = True
-        super().__init__(command_prefix="!", intents=intents, owner_id=owner_id)
+        super().__init__(command_prefix="!", intents=intents, owner_id=owner_id, help_command=None)
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
         self.logger.info("Joined: %s", guild.name)
@@ -22,13 +23,13 @@ class Bot(commands.Bot):
             await self.tree.sync(guild=guild)
             self.logger.info("Synced guild-scoped commands to: %s[%d]", guild.name, guild.id)
         except discord.Forbidden:
-            self.logger.warning("No permission to sync in guild %s, (%d)", guild.name, guild.id)
+            self.logger.error("No permission to sync in guild %s, (%d)", guild.name, guild.id)
         except discord.HTTPException as e:
             self.logger.error("HTTP sync failure guild: %s, (%d) [status=%s code=%s]", guild.name, guild.id, e.status, e.code)
         except discord.DiscordException:
-            self.logger.exception("Discord sync error guild: %s, (%d)", guild.name, guild.id)
+            self.logger.error("Discord sync error guild: %s, (%d)", guild.name, guild.id)
         except Exception:
-            self.logger.exception("Unexpected sync error guild: %s, (%d)", guild.name, guild.id)
+            self.logger.error("Unexpected sync error guild: %s, (%d)", guild.name, guild.id)
 
     async def setup_hook(self) -> None:
         await self.load_extension("cogs.musicplayer")
@@ -54,7 +55,7 @@ class Bot(commands.Bot):
         if isinstance(error, CheckFailure):
             await reply(interaction, "Invalid permission: Must be owner of the bot!", ephemeral=True)
         else:
-            await reply(interaction, f"{error}")
+            await reply(interaction, f"`{error}`")
             self.logger.warning("%s", error)
         return None
 

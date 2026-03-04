@@ -18,3 +18,4 @@
 *.dockerignore
 *old_cogs
 *bot.log
+*tests
