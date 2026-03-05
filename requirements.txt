@@ -12,7 +12,7 @@ aiosignal==1.4.0
     # via aiohttp
 attrs==25.4.0
     # via aiohttp
-audioop-lts==0.2.2
+audioop-lts==0.2.2 ; python_version >= "3.13"
     # via discord-py
 certifi==2026.2.25
     # via requests

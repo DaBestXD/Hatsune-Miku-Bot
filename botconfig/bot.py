@@ -6,7 +6,7 @@ from discord.app_commands.errors import AppCommandError
 from discord.ext import commands
 from discord.interactions import Interaction
 from botextras.constants import USER_ID, DISCORD_TOKEN
-from botextras.bot_funcs_ext import reply
+from botextras.bot_funcs_ext import reply, return_general_embed
 
 class Bot(commands.Bot):
     def __init__(self, owner_id: int|None) -> None:
@@ -55,7 +55,7 @@ class Bot(commands.Bot):
         if isinstance(error, CheckFailure):
             await reply(interaction, "Invalid permission: Must be owner of the bot!", ephemeral=True)
         else:
-            await reply(interaction, f"`{error}`")
+            await reply(interaction, embed=return_general_embed("Error has occured!"))
             self.logger.warning("%s", error)
         return None
 

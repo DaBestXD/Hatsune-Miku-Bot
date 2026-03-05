@@ -173,16 +173,18 @@ class reMikuMusicCommands(commands.Cog):
         if not self.bot.user or member.id != self.bot.user.id:
             return None
         g_id = member.guild.id
+        if not g_id in self.guildpback_dict:
+            return None
+        gp_state = self.guildpback_dict[g_id]
         if not before.channel and after.channel:
             self.logger.info("Bot has joined the voice channel: %s at [%s]", after.channel, member.guild.name)
-            if g_id in self.guildpback_dict:
-                if isinstance(member.guild.voice_client, VoiceClient):
-                    self.guildpback_dict[g_id].vc = member.guild.voice_client
+            if isinstance(member.guild.voice_client, VoiceClient):
+                gp_state.vc = member.guild.voice_client
             return None
         if before.channel and not after.channel:
             self.logger.info("Bot has left the voice channel: %s at [%s]", before.channel, member.guild.name)
             if g_id in self.guildpback_dict:
-                await self.guildpback_dict[g_id].voice_cleanup()
+                gp_state.vc = None
             return None
         if before.channel != after.channel:
             self.logger.info("Bot has moved from %s to %s at [%s]", before.channel, after.channel, member.guild.name)
@@ -218,6 +220,7 @@ class reMikuMusicCommands(commands.Cog):
         user = interaction.user
         if not g_id or g_id not in self.guildpback_dict or not guild or isinstance(user, User):
             return None
+        await interaction.response.defer()
         vc = await self.join_vc(interaction)
         if not isinstance(vc, VoiceClient):
             return None
@@ -335,7 +338,7 @@ class reMikuMusicCommands(commands.Cog):
             return None
         gp_state = self.guildpback_dict[g_id]
         try:
-            if index == 0:
+            if index == 0 or index < 0:
                 raise IndexError
             await reply(interaction,embed=return_general_embed(f"Removing {gp_state.songs_list[index]} from queue"))
             gp_state.songs_list.pop(index)
@@ -382,8 +385,8 @@ class reMikuMusicCommands(commands.Cog):
             return None
         gp_state = self.guildpback_dict[g_id]
         if gp_state.source:
-            if volume >= 2:
-                await reply(interaction, embed=return_general_embed(f"Volume must be less than 2`"),ephemeral=True)
+            if volume > 2:
+                await reply(interaction, embed=return_general_embed(f"Volume must be less than 2"),ephemeral=True)
                 return None
             gp_state.source.volume = volume
             self.logger.info("Volume set to %f", volume)

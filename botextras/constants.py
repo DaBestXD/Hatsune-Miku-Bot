@@ -39,7 +39,7 @@ AUDIO_OPTS = cast(Any,{
 })
 FFMPEG_OPTS = cast(Any,{
     "before_options": "-nostdin -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-    "options": "-vn",
+    "options": "-vn -af loudnorm=I=-16:TP=-1.5:LRA=11",
 })
 SP_PLAYLIST_PARAMS = {"market": "US","fields": "items(track(name,duration_ms,artists(name),external_urls(spotify),album(images(url)))),next,total",}
 SP_ALBUM_PARAMS = {"market": "US","fields": "items(name,duration_ms,artists(name),external_urls(spotify)),next,total",}
