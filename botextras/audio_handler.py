@@ -197,7 +197,7 @@ def sp_multi_helper_func(api_link: str, headers: dict[str,str], params: dict[str
         params = None
     return songs
 # TODO oh my god... Fix this
-def get_Spotify_Info(path_type: str, id: str) -> Playlist|Song|None:
+def get_spotify_info(path_type: str, id: str) -> Playlist|Song|None:
     token = get_token()
     headers = {"Authorization" : f"Bearer {token}"}
     songs:list[Song]|None = []
@@ -262,7 +262,7 @@ def _get_Song_Info(url: str) -> Playlist|Song|None:
         re_groups = re.match(r"(track/|playlist/|album/)(\w+)(?:\?|$)", url_path)
         if re_groups:
             id = re_groups.group(2)
-            return get_Spotify_Info(url, id)
+            return get_spotify_info(url, id)
     if YOUTUBE in url_domain:
         return get_Youtube_Info(url)
     if SOUNDCLOUD in url_domain:

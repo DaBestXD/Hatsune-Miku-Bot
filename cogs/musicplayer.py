@@ -34,7 +34,6 @@ class GuildPlaybackState():
 
     def start_timer(self):
         self.start_time = time.monotonic() if not self.start_time else self.start_time
-        self.mod_mid_song = False
     def end_timer(self):
         self.start_time = None
 
@@ -71,7 +70,7 @@ class GuildPlaybackState():
             audio_source = await get_Audio_Source((song.title, song.webpage_url))
             if audio_source:
                 self.song_cache[song.webpage_url] = audio_source
-                self.logger.info("Caching %s for 60 minutes", song.title)
+                self.logger.info("Caching %s for 15 minutes", song.title)
                 asyncio.create_task(self.cleanup_cache(song.webpage_url))
                 return True
             else:
@@ -124,10 +123,14 @@ class GuildPlaybackState():
             music_start = self.seek_time if self.seek_time else 0
             source: PCMVolumeTransformer = await asyncio.to_thread(build_audio, self.volume, ffmpeg_source, stderr_buf, seek_time=music_start,opts=self.song_mods)
             self.play_audio(source,stderr_buf,bot,song.webpage_url)
+            print(self.mod_mid_song,music_start)
             if self.text_channel:
                 next_song = self.songs_list[1] if len(self.songs_list) >= 2 else None
                 if not self.mod_mid_song:
                     await self.text_channel.send(embed=song.return_embed(next_song))
+                else:
+                    self.mod_mid_song = False
+                    self.seek_time = None
         if self.text_channel and not self.songs_list:
             await self.text_channel.send(embed=txt_only_embed("Queue empty"))
             self.source = None
@@ -407,7 +410,6 @@ class MikuMusicCommands(commands.Cog):
         await reply(interaction, embed=txt_only_embed(f"Set volume to: {gp_state.volume}"))
         return None
     @app_commands.command(name="night-core", description="Toggle night-core")
-    @app_commands.guilds(GUILD_OBJECT, discord.Object(id=1476597945540280502))
     async def night_core(self, interaction: discord.Interaction):
         await interaction.response.defer()
         g_id = interaction.guild_id
@@ -437,8 +439,6 @@ class MikuMusicCommands(commands.Cog):
                 gp_state.song_mods = f",aresample=48000,asetrate=48000*{effect_strength},aresample=48000"
             else:
                 gp_state.song_mods = f",atempo={effect_strength}"
-            gp_state.mod_mid_song = False
-            gp_state.seek_time = None
             gp_state.vc.stop()
         return None
 
