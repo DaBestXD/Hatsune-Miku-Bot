@@ -2,12 +2,10 @@ from __future__ import annotations
 import os
 import discord
 from pathlib import Path
-from typing import cast, Any
+from typing import Literal, cast, Any
 from dotenv import load_dotenv
-from botextras.loadenv_values import load_env_vals
 from botextras.config import ENV_PATH
 
-load_env_vals()
 load_dotenv(dotenv_path=ENV_PATH)
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = os.getenv("GUILD_ID")
@@ -39,7 +37,7 @@ AUDIO_OPTS = cast(Any,{
 })
 FFMPEG_OPTS = cast(Any,{
     "before_options": "-nostdin -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-    "options": "-vn -af loudnorm=I=-16:TP=-1.5:LRA=11",
+    "options": "-vn -af loudnorm=I=-12:TP=-1.0:LRA=7",
 })
 SP_PLAYLIST_PARAMS = {"market": "US","fields": "items(track(name,duration_ms,artists(name),external_urls(spotify),album(images(url)))),next,total",}
 SP_ALBUM_PARAMS = {"market": "US","fields": "items(name,duration_ms,artists(name),external_urls(spotify)),next,total",}
@@ -57,3 +55,6 @@ SP_TRACK_LINK = "https://api.spotify.com/v1/tracks/"
 SP_PLAYLIST_LINK = "https://api.spotify.com/v1/playlists/"
 INVIS_CHAR = "\u200b"
 ASSET_DIR = Path(__file__).resolve().parent.parent / "assets"
+SLOW_REVERB = ",aecho=0.9:0.8:30|60|90|140:0.55|0.45|0.35|0.25,atempo=0.85"
+NIGHTCORE = ",aresample=48000,asetrate=48000*1.25,aresample=48000"
+CACHE_TIMER = 900

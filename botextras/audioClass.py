@@ -84,6 +84,8 @@ class Playlist():
             body_text.append("End of queue.")
         for idx,s in enumerate(self.songs[:11]):
             safe_title = s.title.replace("[","【").replace("]","】")[:char_limit]
+            if len(safe_title) >= char_limit:
+                safe_title += "..."
             if idx == 0:
                 embed.add_field(name="Currently playing:",value=f"[{safe_title}]({s.webpage_url}) `{s.formatted_duration}`",inline=False)
             else:
