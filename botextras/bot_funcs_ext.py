@@ -2,7 +2,7 @@ from __future__ import annotations
 import discord
 import io
 from botextras.constants import FFMPEG_OPTS
-from discord import (app_commands, Interaction, WebhookMessage,
+from discord import (Color, app_commands, Interaction, WebhookMessage,
     InteractionCallbackResponse, PCMVolumeTransformer, FFmpegPCMAudio)
 
 def owner_command():
@@ -24,10 +24,9 @@ def build_audio(volume: float, source: str, stderr_buf: io.BytesIO, seek_time: f
     opts = FFMPEG_OPTS["options"] + opts
     before_opts = FFMPEG_OPTS["before_options"] + f" -ss {seek_time}"
     pcmaud = FFmpegPCMAudio(source, before_options=before_opts, options=opts, stderr=stderr_buf)
-    voltrans_source = PCMVolumeTransformer(pcmaud,volume=volume)
-    return voltrans_source
+    return PCMVolumeTransformer(pcmaud,volume=volume)
 
 def txt_only_embed(txt: str) -> discord.Embed:
-    embed = discord.Embed()
+    embed = discord.Embed(color=Color.blue())
     embed.set_author(name=txt)
     return embed

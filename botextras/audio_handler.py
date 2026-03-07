@@ -16,7 +16,7 @@ from botextras.constants import (CLIENT_ID, CLIENT_SECRET, EXTRACT_VALS,
     SP_PLAYLIST_LINK,AUDIO_OPTS)
 logger = logging.getLogger(__name__)
 
-def item_extractor(entries: list[dict[str,str|None]], extract_items: tuple[str,...])->list[Song]|None:
+def yt_json_parser(entries: list[dict[str,str|None]], extract_items: tuple[str,...])->list[Song]|None:
     return_val:list[Song] = []
     for e in entries:
         song_dict:dict[str,str] = {}
@@ -72,7 +72,7 @@ def search_Query(query: str) -> Song | None:
                     song_url:str = n.get("url") or "Unknown url"
                     if "channel/" in song_url:
                         continue
-                    song = item_extractor([n],EXTRACT_VALS_SEARCH)
+                    song = yt_json_parser([n],EXTRACT_VALS_SEARCH)
                     if song:
                         song = song[0]
                         songs.append(song)
@@ -97,7 +97,7 @@ def get_Youtube_Info(url: str) -> Playlist|Song|None:
             entries = result.get("entries")
             result = cast(dict[str,str|None],result)
             if entries:
-                songs:list[Song]|None = (item_extractor(entries,EXTRACT_VALS_SEARCH))
+                songs:list[Song]|None = (yt_json_parser(entries,EXTRACT_VALS_SEARCH))
                 if songs:
                     # This extracts playlist thumbnail image I would use the item_extractor function
                     # but I hardcoded it to return list[Song] and I don't want to rewrite the function
@@ -109,7 +109,7 @@ def get_Youtube_Info(url: str) -> Playlist|Song|None:
                     return Playlist(songs,*playlist_vals)
                 else:
                     return None
-            single_song = item_extractor([result],EXTRACT_VALS)
+            single_song = yt_json_parser([result],EXTRACT_VALS)
             if single_song:
                 return single_song[0]
             return None
@@ -134,7 +134,7 @@ def get_Soundcloud_Info(url: str) -> Song| None:
                 if restricted:
                     logger.info("Unable to retrieve soundcloud http_mp3")
                     return None
-                song = item_extractor([result],EXTRACT_VALS)
+                song = yt_json_parser([result],EXTRACT_VALS)
                 if song:
                     return song[0]
                 else:

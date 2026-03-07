@@ -54,7 +54,8 @@ SP_ALBUM_LINK = "https://api.spotify.com/v1/albums/"
 SP_TRACK_LINK = "https://api.spotify.com/v1/tracks/"
 SP_PLAYLIST_LINK = "https://api.spotify.com/v1/playlists/"
 INVIS_CHAR = "\u200b"
-ASSET_DIR = Path(__file__).resolve().parent.parent / "assets"
 SLOW_REVERB = ",aecho=0.9:0.8:30|60|90|140:0.55|0.45|0.35|0.25,atempo=0.85"
 NIGHTCORE = ",aresample=48000,asetrate=48000*1.25,aresample=48000"
 CACHE_TIMER = 900
+ASSET_DIR = Path(__file__).resolve().parent.parent / "assets"
+

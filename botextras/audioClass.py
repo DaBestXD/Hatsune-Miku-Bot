@@ -19,7 +19,7 @@ class Song():
 
     def return_embed(self, next_song: Song|None = None, queued: bool = False, char_limit: int = 45) -> discord.Embed:
         author_title = "Song added to queue:" if queued else "Now playing:"
-        embed = discord.Embed(title=self.title,url=self.webpage_url,description=f"Song length: `{self.formatted_duration}`")
+        embed = discord.Embed(title=self.title,url=self.webpage_url,description=f"Song length: `{self.formatted_duration}`",color=discord.Color.blue())
         embed.set_author(name=author_title)
         embed.set_thumbnail(url=self.thumbnail_url)
         if next_song:
@@ -29,7 +29,7 @@ class Song():
         return embed
 
     def return_err_embed(self) -> discord.Embed:
-        embed = discord.Embed(title=self.title,url=self.webpage_url,description=f"Song length {self.formatted_duration}")
+        embed = discord.Embed(title=self.title,url=self.webpage_url,description=f"Song length {self.formatted_duration}",color=discord.Color.blue())
         embed.set_author(name="Error trying to play:")
         embed.set_thumbnail(url=self.thumbnail_url)
         embed.set_footer(text="Skipping...")
@@ -38,7 +38,7 @@ class Song():
     def return_skip_embed(self, next_song: Song|None = None, char_limit: int = 45) -> discord.Embed:
         safe_title = self.title.replace("[","【").replace("]","】")[:char_limit]
         footer_text: str = f"Next song: {next_song.title[:char_limit]}" if next_song else "End of queue."
-        embed = discord.Embed(title=safe_title,url=self.webpage_url,description=f"Song length: `{self.formatted_duration}`")
+        embed = discord.Embed(title=safe_title,url=self.webpage_url,description=f"Song length: `{self.formatted_duration}`",color=discord.Color.blue())
         embed.set_author(name="Skipping...")
         embed.set_thumbnail(url=self.thumbnail_url)
         embed.set_footer(text=footer_text)
@@ -62,23 +62,23 @@ class Playlist():
         self.formatted_duration = time.strftime("%H:%M:%S",time.gmtime(self.total_duration))
 
     def return_embed(self) -> discord.Embed:
-        embed = discord.Embed(title=self.playlist_title,url=self.playlist_url,description=f"Playlist length: `{self.formatted_duration}`")
+        embed = discord.Embed(title=self.playlist_title,url=self.playlist_url,description=f"Playlist length: `{self.formatted_duration}`",color=discord.Color.blue())
         embed.set_author(name=f"Added {self.length} songs to the queue")
         embed.set_thumbnail(url=self.playlist_thumbnail)
         return embed
 
     def return_err_embed(self) -> discord.Embed:
-        embed = discord.Embed(title=self.playlist_title, url=self.playlist_url,description=f"Playlist length `{self.formatted_duration}`")
+        embed = discord.Embed(title=self.playlist_title, url=self.playlist_url,description=f"Playlist length `{self.formatted_duration}`",color=discord.Color.blue())
         embed.set_author(name="Error trying to play:")
         embed.set_thumbnail(url=self.playlist_thumbnail)
         embed.set_footer(text="Skipping...")
         return embed
 
-    def return_queue_embed(self, char_limit: int = 45) -> tuple[discord.Embed,discord.File]:
-        embed = discord.Embed()
+    def return_queue_embed(self, char_limit: int = 30) -> tuple[discord.Embed,discord.File]:
+        embed = discord.Embed(color=discord.Color.blue())
         body_text:list[str] = []
         img_path = ASSET_DIR / "hatsuneplush.jpg"
-        image_file = discord.File(img_path, filename="hatsuneplush.jpg")
+        bot_thumbnail = discord.File(img_path, filename="hatsuneplush.jpg")
         embed.set_thumbnail(url="attachment://hatsuneplush.jpg")
         if len(self.songs) <= 1:
             body_text.append("End of queue.")
@@ -90,8 +90,8 @@ class Playlist():
                 embed.add_field(name="Currently playing:",value=f"[{safe_title}]({s.webpage_url}) `{s.formatted_duration}`",inline=False)
             else:
                 body_text.append(f"{idx}. [{safe_title}]({s.webpage_url}) `{s.formatted_duration}`")
-        embed.add_field(name="Song queue:",value="\n".join(body_text))
-        return embed, image_file
+        embed.add_field(name="Song queue:",value="\n".join(body_text),inline=False)
+        return embed, bot_thumbnail
 
     def greatest_view_count(self) -> Song|None:
         if self.songs:

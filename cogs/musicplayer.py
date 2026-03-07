@@ -12,7 +12,7 @@ from discord.ext import commands
 from botextras.audioClass import Song, Playlist
 from botextras.audio_handler import get_Audio_Source, get_Song_Info
 from botextras.bot_funcs_ext import reply, build_audio, txt_only_embed
-from botextras.constants import CACHE_TIMER, GUILD_OBJECT
+from botextras.constants import CACHE_TIMER, INVIS_CHAR
 
 class GuildPlaybackState():
     def __init__(self, guild_id: int):
@@ -123,7 +123,6 @@ class GuildPlaybackState():
             music_start = self.seek_time if self.seek_time else 0
             source: PCMVolumeTransformer = await asyncio.to_thread(build_audio, self.volume, ffmpeg_source, stderr_buf, seek_time=music_start,opts=self.song_mods)
             self.play_audio(source,stderr_buf,bot,song.webpage_url)
-            print(self.mod_mid_song,music_start)
             if self.text_channel:
                 next_song = self.songs_list[1] if len(self.songs_list) >= 2 else None
                 if not self.mod_mid_song:
@@ -289,6 +288,8 @@ class MikuMusicCommands(commands.Cog):
             return None
         queue_playlist = Playlist(gp_state.songs_list,playlist_title="Current Queue")
         embed,file = queue_playlist.return_queue_embed()
+        embed.add_field(name=f"Queue details:",value=f"Looping:`{gp_state.song_loop}`\nDuration:`{queue_playlist.formatted_duration}`")
+        embed.add_field(name=INVIS_CHAR,value=f"Nightcore:`{gp_state.nightcore}`\nSongs:`{len(queue_playlist.songs)-1}`")
         await reply(interaction, embed=embed, file=file)
         return None
 
@@ -409,6 +410,7 @@ class MikuMusicCommands(commands.Cog):
             gp_state.volume = volume
         await reply(interaction, embed=txt_only_embed(f"Set volume to: {gp_state.volume}"))
         return None
+
     @app_commands.command(name="night-core", description="Toggle night-core")
     async def night_core(self, interaction: discord.Interaction):
         await interaction.response.defer()
@@ -430,15 +432,15 @@ class MikuMusicCommands(commands.Cog):
         if not g_id or g_id not in self.guildpback_dict:
             return None
         gp_state = self.guildpback_dict[g_id]
+        if mod_type == "pitch":
+            gp_state.song_mods = f",aresample=48000,asetrate=48000*{effect_strength},aresample=48000"
+        else:
+            gp_state.song_mods = f",atempo={effect_strength}"
         if gp_state.vc and gp_state.vc.is_playing():
             gp_state.mod_mid_song = True
             gp_state.songs_list.insert(1,gp_state.songs_list[0])
             if gp_state.start_time:
                 gp_state.seek_time = time.monotonic() - gp_state.start_time
-            if mod_type == "pitch":
-                gp_state.song_mods = f",aresample=48000,asetrate=48000*{effect_strength},aresample=48000"
-            else:
-                gp_state.song_mods = f",atempo={effect_strength}"
             gp_state.vc.stop()
         return None
 
