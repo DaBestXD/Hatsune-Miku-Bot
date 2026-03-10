@@ -1,18 +1,12 @@
 from __future__ import annotations
 import discord
-import io
-from botextras.constants import FFMPEG_OPTS
-from discord import (Color, app_commands, Interaction, WebhookMessage,
-    InteractionCallbackResponse, PCMVolumeTransformer, FFmpegPCMAudio)
+from botextras.constants import USER_ID, ASSET_DIR
+from discord import (Color, Interaction, WebhookMessage,
+    InteractionCallbackResponse,app_commands)
 
 def owner_command():
     async def predicate(interaction: Interaction)-> bool:
-        app = interaction.client.application
-        if not app:
-            await interaction.client.application_info()
-        if interaction.client.application:
-            return interaction.user.id == interaction.client.application.owner.id
-        return False
+        return interaction.user.id == USER_ID
     return app_commands.check(predicate)
 
 async def reply(interaction: discord.Interaction, msg: str = "", **kwargs)-> WebhookMessage | InteractionCallbackResponse:
@@ -20,13 +14,13 @@ async def reply(interaction: discord.Interaction, msg: str = "", **kwargs)-> Web
         return await interaction.followup.send(msg, **kwargs)
     return await interaction.response.send_message(msg, **kwargs)
 
-def build_audio(volume: float, source: str, stderr_buf: io.BytesIO, seek_time: float = 0,opts: str = "") -> PCMVolumeTransformer:
-    opts = FFMPEG_OPTS["options"] + opts
-    before_opts = FFMPEG_OPTS["before_options"] + f" -ss {seek_time}"
-    pcmaud = FFmpegPCMAudio(source, before_options=before_opts, options=opts, stderr=stderr_buf)
-    return PCMVolumeTransformer(pcmaud,volume=volume)
 
 def txt_only_embed(txt: str) -> discord.Embed:
     embed = discord.Embed(color=Color.blue())
     embed.set_author(name=txt)
     return embed
+
+def gen_bot_thumbnail() -> discord.File:
+    img_path = ASSET_DIR / "hatsuneplush.jpg"
+    bot_thumbnail = discord.File(img_path, filename="hatsuneplush.jpg")
+    return bot_thumbnail

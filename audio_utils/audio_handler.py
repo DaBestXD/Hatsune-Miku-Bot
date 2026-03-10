@@ -6,7 +6,7 @@ import base64
 import warnings
 import asyncio
 from typing import cast
-from botextras.audioClass import Song, Playlist
+from audio_utils.audio_class import Song, Playlist
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 from botextras.constants import (CLIENT_ID, CLIENT_SECRET, EXTRACT_VALS,
@@ -92,8 +92,14 @@ def get_Youtube_Info(url: str) -> Playlist|Song|None:
     This function is strictly for urls(Playlist or single tracks)
     """
     try:
+        cleaned_url = re.match(r"^([^&+]*)",url)
+        if cleaned_url:
+            cleaned_url = cleaned_url.group(1)
+        else:
+            logger.error("Regex error for %s", url)
+            return None
         with YoutubeDL(params=YDL_OPTS) as ydl:
-            result = ydl.extract_info(url, download=False,process=False)
+            result = ydl.extract_info(cleaned_url, download=False,process=False)
             entries = result.get("entries")
             result = cast(dict[str,str|None],result)
             if entries:

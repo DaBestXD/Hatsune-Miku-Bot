@@ -1,10 +1,10 @@
 from __future__ import annotations
 import logging
 import discord
+from discord import Interaction
 from discord.app_commands import CheckFailure
 from discord.app_commands.errors import AppCommandError
 from discord.ext import commands
-from discord.interactions import Interaction
 from botextras.constants import USER_ID, DISCORD_TOKEN
 from botextras.bot_funcs_ext import reply, txt_only_embed
 
@@ -33,7 +33,8 @@ class Bot(commands.Bot):
 
     async def setup_hook(self) -> None:
         await self.load_extension("cogs.musicplayer")
-        # await self.load_extension("cogs.debugger")
+        await self.load_extension("cogs.debugger")
+        await self.load_extension("cogs.utilcommands")
         for ext in self.extensions:
             self.logger.info("Loaded %s", ext)
         self.tree.on_error = self.on_app_command_error

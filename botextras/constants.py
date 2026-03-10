@@ -56,6 +56,8 @@ SP_PLAYLIST_LINK = "https://api.spotify.com/v1/playlists/"
 INVIS_CHAR = "\u200b"
 SLOW_REVERB = ",aecho=0.9:0.8:30|60|90|140:0.55|0.45|0.35|0.25,atempo=0.85"
 NIGHTCORE = ",aresample=48000,asetrate=48000*1.25,aresample=48000"
-CACHE_TIMER = 900
+# In seconds
+CACHE_TIMER_S = 900
 ASSET_DIR = Path(__file__).resolve().parent.parent / "assets"
-
+DIS_BOT_THUMBNAIL = "attachment://hatsuneplush.jpg"
+GP_DEBUG_VALUES = {"guild_id","song_cache","songs_list","song_loop","source","volume","text_channel","cache_task","start_time","seek_time","song_mods","mod_mid_song","nightcore"}
