@@ -14,6 +14,7 @@ from botextras.constants import (CLIENT_ID, CLIENT_SECRET, EXTRACT_VALS,
     SP_ALBUM_PARAMS, SP_PLAYLIST_META_PARAMS, SP_PLAYLIST_PARAMS, YDL_OPTS,
     YOUTUBE, SOUNDCLOUD, SPOTIFY, SP_ALBUM_LINK, SP_TRACK_LINK,
     SP_PLAYLIST_LINK,AUDIO_OPTS)
+
 logger = logging.getLogger(__name__)
 
 def yt_json_parser(entries: list[dict[str,str|None]], extract_items: tuple[str,...])->list[Song]|None:

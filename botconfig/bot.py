@@ -6,7 +6,7 @@ from discord.app_commands import CheckFailure
 from discord.app_commands.errors import AppCommandError
 from discord.ext import commands
 from botextras.constants import USER_ID, DISCORD_TOKEN
-from botextras.bot_funcs_ext import reply, txt_only_embed
+from botextras.bot_funcs_ext import reply, text_only_embed
 
 class Bot(commands.Bot):
     def __init__(self, owner_id: int|None) -> None:
@@ -33,7 +33,7 @@ class Bot(commands.Bot):
 
     async def setup_hook(self) -> None:
         await self.load_extension("cogs.musicplayer")
-        await self.load_extension("cogs.debugger")
+        # await self.load_extension("cogs.debugger")
         await self.load_extension("cogs.utilcommands")
         for ext in self.extensions:
             self.logger.info("Loaded %s", ext)
@@ -56,7 +56,7 @@ class Bot(commands.Bot):
         if isinstance(error, CheckFailure):
             await reply(interaction, "Invalid permission: Must be owner of the bot!", ephemeral=True)
         else:
-            await reply(interaction, embed=txt_only_embed("Error has occured!"))
+            await reply(interaction, embed=text_only_embed("Error has occured!"))
             self.logger.warning("%s", error)
         return None
 

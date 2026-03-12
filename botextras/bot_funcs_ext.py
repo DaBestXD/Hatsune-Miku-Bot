@@ -15,7 +15,7 @@ async def reply(interaction: discord.Interaction, msg: str = "", **kwargs)-> Web
     return await interaction.response.send_message(msg, **kwargs)
 
 
-def txt_only_embed(txt: str) -> discord.Embed:
+def text_only_embed(txt: str) -> discord.Embed:
     embed = discord.Embed(color=Color.blue())
     embed.set_author(name=txt)
     return embed
@@ -24,3 +24,11 @@ def gen_bot_thumbnail() -> discord.File:
     img_path = ASSET_DIR / "hatsuneplush.jpg"
     bot_thumbnail = discord.File(img_path, filename="hatsuneplush.jpg")
     return bot_thumbnail
+
+def code_block_embed(txt: list[str],title: str) -> discord.Embed:
+    body_txt: list[str] = ["```"]
+    body_txt.extend(txt)
+    body_txt.append("```")
+    embed = discord.Embed(color=discord.Color.blue())
+    embed.add_field(name=title,value="\n".join(body_txt))
+    return embed
