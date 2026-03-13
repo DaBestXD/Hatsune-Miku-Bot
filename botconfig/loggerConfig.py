@@ -1,5 +1,6 @@
 import logging
 import sys
+from pathlib import Path
 
 class ColorFormatter(logging.Formatter):
     RESET = "\033[0m"
@@ -20,10 +21,14 @@ class ColorFormatter(logging.Formatter):
         return out
 
 def logger_config() -> None:
+    log_dir = Path("./logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "bot.log"
+
     file_fmt = logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s', '%Y-%m-%d %H:%M:%S')
     console_fmt = ColorFormatter('[%(asctime)s] [%(levelname)s] %(message)s', '%Y-%m-%d %H:%M:%S')
 
-    file_h = logging.FileHandler("./logs/bot.log")
+    file_h = logging.FileHandler(log_path, encoding="utf-8")
     file_h.setFormatter(file_fmt)
 
     stream_h = logging.StreamHandler(sys.stdout)

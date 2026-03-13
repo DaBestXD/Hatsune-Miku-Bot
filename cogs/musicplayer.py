@@ -103,6 +103,9 @@ class MikuMusicCommands(commands.Cog):
 
         songs = result.songs if isinstance(result, Playlist) else [result]
         text_channel = interaction.channel if isinstance(interaction.channel, TextChannel) else None
+        if not text_channel:
+            await reply(interaction, embed=text_only_embed("Can only be used in text channel!"))
+            return None
         gp_con = await self.return_gp_con(g_id)
 
         if text_channel:
@@ -136,7 +139,8 @@ class MikuMusicCommands(commands.Cog):
         """
         await interaction.response.defer()
         if not(g_id := interaction.guild_id): return None
-        await join_vc(interaction,join=False)
+        vc = await join_vc(interaction,join=False)
+        if not vc: return None
         gp_con = await self.return_gp_con(g_id)
         if not gp_con.state.songs:
             await reply(interaction,embed=text_only_embed("Queue empty"))
@@ -149,6 +153,7 @@ class MikuMusicCommands(commands.Cog):
         Usage /shuffle Shuffles music queue
         """
         if not(g_id := interaction.guild_id): return None
+        await interaction.response.defer()
         gp_con = await self.return_gp_con(g_id)
         await gp_con.add_event(Shuffle(interaction))
         return None
@@ -160,6 +165,7 @@ class MikuMusicCommands(commands.Cog):
         Usage /loop Loops current song
         """
         if not(g_id := interaction.guild_id): return None
+        await interaction.response.defer()
         gp_con = await self.return_gp_con(g_id)
         await gp_con.add_event(LoopSong(interaction,gp_con.state.song_loop))
 
@@ -171,6 +177,7 @@ class MikuMusicCommands(commands.Cog):
         Usage /remove [index] Removes song at index from queue
         """
         if not(g_id := interaction.guild_id): return None
+        await interaction.response.defer()
         gp_con = await self.return_gp_con(g_id)
         await gp_con.add_event(RemoveFromQueue(interaction,index))
         return None
@@ -181,8 +188,8 @@ class MikuMusicCommands(commands.Cog):
         """
         Usage /stop Clears the music queue and disconnects bot from call
         """
-        await interaction.response.defer()
         if not(g_id := interaction.guild_id): return None
+        await interaction.response.defer()
         gp_con = await self.return_gp_con(g_id)
         await gp_con.add_event(StopPlayblack(interaction))
         return None
@@ -194,6 +201,7 @@ class MikuMusicCommands(commands.Cog):
         Usage /clear Clears the current music queue
         """
         if not(g_id := interaction.guild_id): return None
+        await interaction.response.defer()
         gp_con = await self.return_gp_con(g_id)
         await gp_con.add_event(ClearQueue(interaction))
         return None
@@ -206,6 +214,7 @@ class MikuMusicCommands(commands.Cog):
         Usage /set_volume [0.0-2.0] Set volume between 0-2
         """
         if not(g_id := interaction.guild_id): return None
+        await interaction.response.defer()
         gp_con = await self.return_gp_con(g_id)
         await gp_con.add_event(VolumeControl(volume))
         await reply(interaction, embed=text_only_embed(f"Set volume to: {volume}"))
@@ -219,6 +228,7 @@ class MikuMusicCommands(commands.Cog):
         Usage /night_core Toggles nightcore on
         """
         if not(g_id := interaction.guild_id): return None
+        await interaction.response.defer()
         gp_con = await self.return_gp_con(g_id)
         if not gp_con.state.songs:
             await reply(interaction,embed=text_only_embed("Queue empty!"))

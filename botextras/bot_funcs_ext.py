@@ -9,10 +9,13 @@ def owner_command():
         return interaction.user.id == USER_ID
     return app_commands.check(predicate)
 
-async def reply(interaction: discord.Interaction, msg: str = "", **kwargs)-> WebhookMessage | InteractionCallbackResponse:
-    if interaction.response.is_done():
-        return await interaction.followup.send(msg, **kwargs)
-    return await interaction.response.send_message(msg, **kwargs)
+async def reply(interaction: discord.Interaction, msg: str = "", **kwargs)-> WebhookMessage|InteractionCallbackResponse|None:
+    try:
+        if interaction.response.is_done():
+            return await interaction.followup.send(msg, **kwargs)
+        return await interaction.response.send_message(msg, **kwargs)
+    except discord.NotFound:
+        return None
 
 
 def text_only_embed(txt: str) -> discord.Embed:

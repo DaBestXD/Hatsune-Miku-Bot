@@ -10,7 +10,10 @@ class Song():
         self.thumbnail_url:str = thumbnail_url
         try:
             self.duration = int(float(duration))
-            self.formatted_duration = time.strftime("%M:%S",time.gmtime(self.duration))
+            if self.duration < 3600:
+                self.formatted_duration = time.strftime("%M:%S",time.gmtime(self.duration))
+            else:
+                self.formatted_duration = time.strftime("%H:%M:%S",time.gmtime(self.duration))
         except ValueError:
             self.duration = 0
             self.formatted_duration = "0"

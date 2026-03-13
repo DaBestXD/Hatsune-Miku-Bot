@@ -16,12 +16,18 @@ class QueueEmbed():
     def __init__(self, gp_con: GuildStateController) -> None:
         self.page_number = 0
         self.playlist = Playlist(gp_con.state.songs)
-        self.max_pages = len(gp_con.state.songs) // 10
+        self.max_pages = 0
         self.embed: discord.Embed|None = None
         self.update_embed(gp_con)
 
     def update_embed(self, gp_con: GuildStateController):
-        self.max_pages = len(gp_con.state.songs) // 10
+        queued_songs = gp_con.state.songs[1:]
+        queued_song_count = len(queued_songs)
+        self.max_pages = ((queued_song_count - 1) // 10) if queued_song_count else 0
+        if self.page_number > self.max_pages:
+            self.page_number = self.max_pages
+        if self.page_number < 0:
+            self.page_number = 0
         if active_song := gp_con.state.active_song:
             truncated_title:str = active_song.title[:30]
             if len(truncated_title) >= 30: truncated_title += "..."
@@ -35,13 +41,13 @@ class QueueEmbed():
                 self.embed.url = active_song.webpage_url
                 self.embed.clear_fields()
             start = self.page_number * 10
-            page_slice = slice(start, start+10) if self.page_number >= 1 else slice(1,10)
+            page_slice = queued_songs[start:start + 10]
             body_text: list[str] = []
-            if len(gp_con.state.songs) > 1:
-                for idx,s in enumerate(gp_con.state.songs[page_slice]):
-                    safe_title = s.title.replace("[","【").replace("]","】")[:30]
-                    if len(safe_title) >= 30: safe_title += "..."
-                    body_text.append(f"{idx+(self.page_number*10)}. [{safe_title}]({s.webpage_url}) `{s.formatted_duration}`")
+            if queued_songs:
+                for idx, s in enumerate(page_slice, start=start + 1):
+                    safe_title = s.title.replace("[","【").replace("]","】")[:25]
+                    if len(safe_title) >= 25: safe_title += "..."
+                    body_text.append(f"{idx}. [{safe_title}]({s.webpage_url}) `{s.formatted_duration}`")
                 self.embed.add_field(name="Song queue:",value="\n".join(body_text),inline=False)
             else:
                 self.embed.add_field(name="Song queue:",value="Queue empty!",inline=False)
@@ -50,7 +56,7 @@ class QueueEmbed():
             playlist = Playlist(gp_con.state.songs)
             self.embed.add_field(name=f"Queue details:",value=f"Looping:`{human_loop}`\nDuration:`{playlist.formatted_duration}`")
             self.embed.add_field(name=INVIS_CHAR,value=f"Nightcore:`{human_night}`\nSongs:`{len(playlist.songs)-1}`")
-            self.embed.set_footer(text=f"Page: {1 if self.page_number < 0 else self.page_number+1} of {(len(playlist.songs)//10)+1}")
+            self.embed.set_footer(text=f"Page: {self.page_number + 1} of {self.max_pages + 1}")
 
 
     def page_right(self, gp_con: GuildStateController):
@@ -97,6 +103,7 @@ class QueueView(ui.View):
     @discord.ui.button(emoji="🔀",style=discord.ButtonStyle.secondary, disabled=False)
     async def button_shuffle(self, interaction: Interaction, button: ui.Button):
         if not (g_id := interaction.guild_id): return None
+        await interaction.response.defer()
         gp_con = await self.miku.return_gp_con(g_id)
         done = asyncio.get_running_loop().create_future()
         await gp_con.add_event(Shuffle(interaction,done))
@@ -109,6 +116,7 @@ class QueueView(ui.View):
     @discord.ui.button(emoji="<:WAPPLE:883418567654117426>",style=discord.ButtonStyle.danger, disabled=False)
     async def button_night_core(self, interaction: Interaction, button: ui.Button):
         if not (g_id := interaction.guild_id): return None
+        await interaction.response.defer()
         if (vc := await join_vc(interaction,join=False)) and isinstance(vc, VoiceClient):
             gp_con = await self.miku.return_gp_con(g_id)
             done = asyncio.get_running_loop().create_future()
@@ -122,11 +130,13 @@ class QueueView(ui.View):
     @discord.ui.button(label="STOP",style=discord.ButtonStyle.success, disabled=False)
     async def button_stop(self, interaction: Interaction, button: ui.Button):
         if not (g_id := interaction.guild_id): return None
+        await interaction.response.defer()
         gp_con = await self.miku.return_gp_con(g_id)
         for item in self.children:
             if isinstance(item, discord.ui.Button):
                 item.disabled = True
-        await interaction.response.edit_message(view=self)
+        if self.message:
+            await self.message.edit(view=self)
         await gp_con.add_event(StopPlayblack(interaction))
 
     async def on_timeout(self):
