@@ -13,8 +13,6 @@
 *pyrightconfig.json
 *lazyrun.sh
 *.markdownlint.json
-*Dockerfile
-*.dockerignore
 *old_cogs
 *bot.log
 *tests
