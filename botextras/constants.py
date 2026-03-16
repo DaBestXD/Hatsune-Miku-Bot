@@ -1,20 +1,18 @@
 from __future__ import annotations
 import os
 import discord
-from pathlib import Path
-from typing import Literal, cast, Any
+from typing import cast, Any
 from dotenv import load_dotenv
 from botextras.config import ENV_PATH
 
 load_dotenv(dotenv_path=ENV_PATH)
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = os.getenv("GUILD_ID")
-assert GUILD_ID, "Guild ID cannot be none"
 assert DISCORD_TOKEN, "Discord token cannot be none"
 USER_ID = os.getenv("USER_ID")
 USER_ID = None if not USER_ID else int(USER_ID)
-GUILD_ID = int(GUILD_ID)
-GUILD_OBJECT = discord.Object(id=GUILD_ID)
+if GUILD_ID:
+    GUILD_OBJECT = discord.Object(id=int(GUILD_ID))
 CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 #Any cast to make the type checker shut up cause importing _Params doesnt work😾
@@ -58,6 +56,5 @@ SLOW_REVERB = ",aecho=0.9:0.8:30|60|90|140:0.55|0.45|0.35|0.25,atempo=0.85"
 NIGHTCORE = ",aresample=48000,asetrate=48000*1.25,aresample=48000"
 # In seconds
 CACHE_TIMER_S = 1800
-ASSET_DIR = Path(__file__).resolve().parent.parent / "assets"
 DIS_BOT_THUMBNAIL = "attachment://hatsuneplush.jpg"
 GP_DEBUG_VALUES = {"guild_id","song_cache","songs_list","song_loop","source","volume","text_channel","start_time","seek_time","song_mods","mod_mid_song","nightcore"}

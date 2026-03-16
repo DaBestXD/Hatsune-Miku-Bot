@@ -5,13 +5,14 @@ from discord import Interaction
 from discord.app_commands import CheckFailure
 from discord.app_commands.errors import AppCommandError
 from discord.ext import commands
-from botextras.constants import USER_ID, DISCORD_TOKEN
+from botextras.constants import GUILD_ID, USER_ID, DISCORD_TOKEN
 from botextras.bot_funcs_ext import reply, text_only_embed
 
 class Bot(commands.Bot):
-    def __init__(self, owner_id: int|None) -> None:
+    def __init__(self, owner_id: int|None, debugger_on: bool = False) -> None:
         self.logger = logging.getLogger(self.__class__.__name__)
         self.synced: bool = False
+        self.debugger_on = debugger_on
         intents = discord.Intents.default()
         intents.message_content = True
         intents.voice_states = True
@@ -33,7 +34,8 @@ class Bot(commands.Bot):
 
     async def setup_hook(self) -> None:
         await self.load_extension("cogs.musicplayer")
-        # await self.load_extension("cogs.debugger")
+        if self.debugger_on and USER_ID and GUILD_ID:
+            await self.load_extension("cogs.debugger")
         await self.load_extension("cogs.utilcommands")
         for ext in self.extensions:
             self.logger.info("Loaded %s", ext)
@@ -60,6 +62,6 @@ class Bot(commands.Bot):
             self.logger.warning("%s", error)
         return None
 
-def botsetup()-> tuple[Bot, str]:
+def botsetup(debugger_on:bool = False)-> tuple[Bot, str]:
     assert DISCORD_TOKEN, "Discord token cannot be none"
-    return (Bot(owner_id=USER_ID), DISCORD_TOKEN)
+    return (Bot(owner_id=USER_ID,debugger_on=debugger_on), DISCORD_TOKEN)

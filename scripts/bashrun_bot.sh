@@ -1,6 +1,16 @@
-#!/bin/bash
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." &>/dev/null && pwd)
-source "$SCRIPT_DIR/EnvHatsuneMiku/bin/activate"
-pip install --upgrade yt-dlp
-pip install --upgrade pip
-python "$SCRIPT_DIR/main.py"
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)
+ENV_DIR="$PROJECT_ROOT/EnvHatsuneMiku"
+VENV_PYTHON="$ENV_DIR/bin/python"
+SETUP_SCRIPT="$PROJECT_ROOT/scripts/bash_botsetup.sh"
+
+cd "$PROJECT_ROOT"
+
+if [ ! -x "$VENV_PYTHON" ]; then
+  echo "Virtual environment not found. Running setup first."
+  bash "$SETUP_SCRIPT"
+fi
+
+exec "$VENV_PYTHON" "$PROJECT_ROOT/main.py" "$@"
