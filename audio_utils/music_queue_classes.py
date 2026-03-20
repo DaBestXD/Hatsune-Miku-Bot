@@ -53,9 +53,12 @@ class QueueEmbed():
                 self.embed.add_field(name="Song queue:",value="Queue empty!",inline=False)
             human_night = "Enabled" if gp_con.state.nightcore else "Disabled"
             human_loop = "Enabled" if gp_con.state.song_loop else "Disabled"
+            human_speed = "Default" if not gp_con.state.song_speed else gp_con.state.song_speed.replace(",atempo=","")
+            human_bass = "Default" if not (b:=gp_con.state.song_bass.replace(",bass=g=","")) else b
             playlist = Playlist(gp_con.state.songs)
             self.embed.add_field(name=f"Queue details:",value=f"Looping:`{human_loop}`\nDuration:`{playlist.formatted_duration}`")
             self.embed.add_field(name=INVIS_CHAR,value=f"Nightcore:`{human_night}`\nSongs:`{len(playlist.songs)-1}`")
+            self.embed.add_field(name=INVIS_CHAR,value=f"Speed:`{human_speed}`\nBass:`{human_bass}`")
             self.embed.set_footer(text=f"Page: {self.page_number + 1} of {self.max_pages + 1}")
 
 

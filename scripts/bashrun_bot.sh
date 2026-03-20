@@ -12,5 +12,6 @@ if [ ! -x "$VENV_PYTHON" ]; then
   echo "Virtual environment not found. Running setup first."
   bash "$SETUP_SCRIPT"
 fi
-
+"$VENV_PYTHON" -m pip install -U yt-dlp
+"$VENV_PYTHON" -m yt_dlp --remote-components ejs:github --version >/dev/null
 exec "$VENV_PYTHON" "$PROJECT_ROOT/main.py" "$@"

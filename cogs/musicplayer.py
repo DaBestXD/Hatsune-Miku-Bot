@@ -10,7 +10,7 @@ from audio_utils.guildstate_controller import GuildStateController, QueueSongs, 
 from audio_utils.music_queue_classes import QueueEmbed, QueueView
 from audio_utils.bot_audio_functions import join_vc
 from botextras.bot_events import (ClearQueue, LoopSong, Nightcore,
-    RemoveFromQueue, Shuffle, StopPlayblack, UpdateVoiceStatus, VolumeControl)
+    RemoveFromQueue, SetBass, SetSpeed, Shuffle, StopPlayblack, UpdateVoiceStatus, VolumeControl)
 from botextras.bot_funcs_ext import reply, text_only_embed,gen_bot_thumbnail
 
 
@@ -239,6 +239,41 @@ class MikuMusicCommands(commands.Cog):
         return None
 
 
+    @app_commands.command(name="bass-boost", description="Set bass of song to value")
+    @app_commands.describe(effect_strength="Warning most values over 20 will distort sound(default value is 0)")
+    @app_commands.guild_only()
+    async def bass_boost(self, interaction: discord.Interaction, effect_strength: float):
+        """
+        Usage /bass-boost [float]
+        """
+        if not(g_id := interaction.guild_id): return None
+        await interaction.response.defer()
+        gp_con = await self.return_gp_con(g_id)
+        if not gp_con.state.songs:
+            await reply(interaction,embed=text_only_embed("Queue empty!"))
+            return None
+        if not isinstance(vc := await join_vc(interaction), VoiceClient):
+            return None
+        await gp_con.add_event(SetBass(interaction,vc,effect_strength))
+        return None
+
+    @app_commands.command(name="speed", description="Change the song speed from 00.1 -> 2.0")
+    @app_commands.describe(effect_strength="Select a value between 0.01 -> 2.0(default value is 1)")
+    @app_commands.guild_only()
+    async def speed(self, interaction: discord.Interaction, effect_strength: app_commands.Range[float,0.01,2.0]):
+        """
+        Usage /speed [0.01, 2.0]
+        """
+        if not(g_id := interaction.guild_id): return None
+        await interaction.response.defer()
+        gp_con = await self.return_gp_con(g_id)
+        if not gp_con.state.songs:
+            await reply(interaction,embed=text_only_embed("Queue empty!"))
+            return None
+        if not isinstance(vc := await join_vc(interaction), VoiceClient):
+            return None
+        await gp_con.add_event(SetSpeed(interaction,vc,effect_strength))
+        return None
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(MikuMusicCommands(bot))

@@ -4,12 +4,14 @@ import logging
 import time
 import random
 from collections.abc import Awaitable, Callable
+from typing import Set
+from discord import Interaction
 from discord.ext import commands
 from audio_utils.audio_handler import get_Audio_Source
 from audio_utils.bot_audio_functions import build_audio, mod_song
 from botextras.bot_funcs_ext import reply, text_only_embed
 from botextras.bot_events import (FinishedPlayback, ClearQueue, LoopSong,
-    Nightcore, QueueSongs, RemoveFromQueue, Shuffle, Skip, GuildPlaybackState,
+    Nightcore, QueueSongs, RemoveFromQueue, SetBass, SetSpeed, Shuffle, Skip, GuildPlaybackState,
     Event, StopPlayblack, UpdateVoiceStatus, VolumeControl)
 from botextras.constants import CACHE_TIMER_S
 
@@ -35,6 +37,8 @@ class GuildStateController():
             LoopSong: self._loop_song,
             ClearQueue: self._clear_queue,
             FinishedPlayback: self._finished_playback,
+            SetBass: self._setbass,
+            SetSpeed: self._setspeed,
         }
 
     async def run(self):
@@ -78,6 +82,7 @@ class GuildStateController():
 
     def _fail_event(self, event: Event, exc: Exception) -> None:
         done = getattr(event, "done", None)
+        self.logger.exception("%s", exc.__str__)
         if done and not done.done():
             done.set_exception(exc)
         return None
@@ -167,7 +172,14 @@ class GuildStateController():
                 return await self._play()
             stderr_buff = io.BytesIO()
             seek_time = self.state.seek_time if self.state.seek_time else 0
-            built_source = await asyncio.to_thread(build_audio,self.state.volume,source,stderr_buff,seek_time,self.state.song_mods)
+            # prob should change song_mods to be a class that builds one string
+            song_mods = self.state.song_bass + self.state.song_pitch + self.state.song_speed
+            built_source = await asyncio.to_thread(build_audio,
+                                                   self.state.volume,
+                                                   source,
+                                                   stderr_buff,
+                                                   seek_time,
+                                                   song_mods)
             self.state.source = built_source
             self.state.vc.play(built_source, after= lambda error, stderr_buff=stderr_buff: self._callback_queue(error,stderr_buff))
             if not self.state.mod_song:
@@ -229,20 +241,40 @@ class GuildStateController():
         await self.bad_cache()
         return None
 
-    async def _nightcore(self, event: Event) -> None:
-        if not isinstance(event, Nightcore): return None
-        self.state.song_mods = await mod_song("pitch",1.25) if not self.state.song_mods else await mod_song("off")
-        self.state.mod_song = True
-        self.state.nightcore = not self.state.nightcore
-        text = "Nightcore on!🙀" if self.state.song_mods != "" else "Nightcore off!😿"
+    async def _song_mod_helper(self, interaction: Interaction, text: str) -> None:
         if self.state.vc and self.state.active_song:
             self.state.songs.insert(1,self.state.active_song)
-            self.state.vc.stop()
             if self.state.start_time:
                 self.state.seek_time = time.monotonic() - self.state.start_time
-            await reply(event.interaction,embed=text_only_embed(text))
+            self.state.vc.stop()
+            await reply(interaction,embed=text_only_embed(text))
+        return None
+
+    async def _nightcore(self, event: Event) -> None:
+        if not isinstance(event, Nightcore): return None
+        self.state.song_pitch = await mod_song("pitch",1.25) if not self.state.song_pitch else await mod_song("off")
+        self.state.mod_song = True
+        text = "Nightcore on!🙀" if not self.state.nightcore else "Nightcore off!😿"
+        self.state.nightcore = not self.state.nightcore
+        await self._song_mod_helper(event.interaction, text)
         if event.done and not event.done.done():
             event.done.set_result(None)
+        return None
+
+    async def _setbass(self, event: Event) -> None:
+        if not isinstance(event, SetBass): return None
+        self.state.song_bass = await mod_song("bass",effect_strength=event.effect_strength)
+        self.state.mod_song = True
+        text = f"Bass set to {event.effect_strength}!"
+        await self._song_mod_helper(event.interaction, text)
+        return None
+
+    async def _setspeed(self, event: Event) -> None:
+        if not isinstance(event, SetSpeed): return None
+        self.state.song_speed = await mod_song("speed",effect_strength=event.effect_strength)
+        self.state.mod_song = True
+        text = f"Speed set to {event.effect_strength}!"
+        await self._song_mod_helper(event.interaction, text)
         return None
 
     async def _stop_playback(self, event: Event) -> None:
@@ -255,7 +287,9 @@ class GuildStateController():
         self.state.nightcore = False
         self.state.song_loop = False
         self.state.mod_song = False
-        self.state.song_mods = ""
+        self.state.song_pitch = ""
+        self.state.song_bass = ""
+        self.state.song_speed = ""
         self.state.songs = []
         if self.state.vc:
             if self.state.vc.is_playing():

@@ -15,7 +15,9 @@ class GuildPlaybackState():
     song_loop: bool = False
     start_time: float|None = None
     seek_time: float|None = None
-    song_mods: str = ""
+    song_bass: str = ""
+    song_speed: str = ""
+    song_pitch: str = ""
     volume: float = 1.0
     text_channel: TextChannel|None = None
     vc: VoiceClient|None = None
@@ -53,6 +55,18 @@ class Nightcore(Event):
     interaction: Interaction
     vc: VoiceClient
     done: asyncio.Future[None]|None = None
+
+@dataclass()
+class SetBass(Event):
+    interaction: Interaction
+    vc: VoiceClient
+    effect_strength: float
+
+@dataclass()
+class SetSpeed(Event):
+    interaction: Interaction
+    vc: VoiceClient
+    effect_strength: float
 
 @dataclass()
 class VolumeControl(Event):
