@@ -1,0 +1,10 @@
+services:
+  hatsune-miku-bot:
+    build: .
+    image: hatsune-miku-bot
+    container_name: hatsune-miku-bot
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped

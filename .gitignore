@@ -1,18 +1,9 @@
 # Created by venv; see https://docs.python.org/3/library/venv.html
 *EnvHatsuneMiku
-*HatsuneMikuENV
 *__pycache__
-*.HatsuneMikuENV
-*audio_files
-*.env
-*.env.prod
-*.env.dev
-*old_files
-*commandsync.py
-*test.py
+.env*
 *pyrightconfig.json
-*lazyrun.sh
 *.markdownlint.json
-*old_cogs
 *bot.log
-*tests
+*old_files
+*test.py
