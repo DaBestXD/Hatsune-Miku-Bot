@@ -1,7 +1,9 @@
 name: Test Tailscale SSH
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - dev
 
 jobs:
   test-ssh:
