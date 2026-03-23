@@ -6,10 +6,7 @@ app = FastAPI()
 router = APIRouter()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://dabestxd.github.io",
-        "https://dabesxd.github.io/YOUR_REPO_NAME",
-    ],
+    allow_origins=[ "https://dabestxd.github.io" ],
     allow_credentials=False,
     allow_methods=["GET"],
     allow_headers=["*"],
