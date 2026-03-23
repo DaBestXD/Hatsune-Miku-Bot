@@ -1,9 +1,7 @@
 import aiosqlite
-# from botextras.constants import DB_PATH
+from botextras.constants import DB_PATH
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parents[2] / "data" / "status.db"
 async def get_status() -> dict[str,str]:
     async with aiosqlite.connect(DB_PATH) as con:
         query = """

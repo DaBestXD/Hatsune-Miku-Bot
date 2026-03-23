@@ -1,6 +1,6 @@
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api_test.api_helpers import  all_uptime_windows, get_status, last_n_events
+from hatsune_miku_bot.api_test.api_helpers import  all_uptime_windows, get_status, last_n_events
 
 app = FastAPI()
 router = APIRouter()
