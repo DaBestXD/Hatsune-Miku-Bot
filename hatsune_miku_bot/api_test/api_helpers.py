@@ -1,5 +1,5 @@
 import aiosqlite
-from botextras.constants import DB_PATH
+from hatsune_miku_bot.botextras.constants import DB_PATH
 from datetime import datetime, timezone, timedelta
 
 async def get_status() -> dict[str,str]:
@@ -19,7 +19,7 @@ async def uptime_percent_since(hours: int) -> float:
         con.row_factory = aiosqlite.Row
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
         query = """
-            SELECT discord_connection FROM snapshots WHERE snapshot_time >= :cutoff ORDER BY id AND uptime_seconds > 0 ASC
+            SELECT discord_connection FROM snapshots WHERE snapshot_time >= :cutoff AND uptime_seconds >0 ORDER BY id ASC
         """
         cur = await con.execute(query, {"cutoff": cutoff})
         rows = await cur.fetchall()

@@ -3,7 +3,7 @@ import os
 import discord
 from typing import cast, Any
 from dotenv import load_dotenv
-from botextras.config import ENV_PATH
+from hatsune_miku_bot.botextras.config import ENV_PATH
 from pathlib import Path
 
 load_dotenv(dotenv_path=ENV_PATH)
