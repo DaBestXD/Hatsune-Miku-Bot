@@ -1,17 +1,32 @@
-name: Hatsune Miku Deploy
+name: Deploy Hatsune Miku Bot
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
-  ssh:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: tailscale/github-action@v4
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
         with:
-          oauth-client-id: ${{ secrets.TS_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_CLIENT_SECRET }}
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
+
+      - name: Deploy on VM over Tailscale SSH
+        run: |
+          ssh -o StrictHostKeyChecking=no "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}" << 'EOF'
+            set -e
+
+            cd ~/Projects/Hatsune-Miku-Bot
+            git fetch origin dev
+            git reset --hard origin/dev
+
+            docker compose down
+            docker compose up -d --build
+          EOF

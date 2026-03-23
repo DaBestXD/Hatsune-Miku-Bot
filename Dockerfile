@@ -24,4 +24,4 @@ COPY . .
 RUN mkdir -p /app/logs
 
 
-CMD ["python", "main.py", "-d"]
+CMD ["python", "hatsune_miku_bot/main.py", "--docker"]

@@ -7,4 +7,24 @@ services:
       - .env
     volumes:
       - ./logs:/app/logs
+      - ./data:/app/data
+    restart: unless-stopped
+
+  hatsune-miku-api:
+    build: .
+    image: hatsune-miku-bot
+    container_name: hatsune-miku-api
+    command:
+      [
+        "uvicorn",
+        "hatsune_miku_bot.api_test.api_test:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+      ]
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "8000:8000"
     restart: unless-stopped
