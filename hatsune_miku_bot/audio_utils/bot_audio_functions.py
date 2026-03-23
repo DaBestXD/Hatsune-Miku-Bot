@@ -1,8 +1,8 @@
 import io
 from typing import Literal
 from discord import FFmpegPCMAudio, PCMVolumeTransformer, Interaction, VoiceProtocol, User
-from hatsune_miku_bot.botextras.constants import FFMPEG_OPTS
-from hatsune_miku_bot.botextras.bot_funcs_ext import reply, text_only_embed
+from botextras.constants import FFMPEG_OPTS
+from botextras.bot_funcs_ext import reply, text_only_embed
 
 def build_audio(volume: float, source: str, stderr_buf: io.BytesIO, seek_time: float = 0,opts: str = "") -> PCMVolumeTransformer:
     opts = FFMPEG_OPTS["options"] + opts

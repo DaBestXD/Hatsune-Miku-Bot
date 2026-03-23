@@ -1,4 +1,4 @@
-from hatsune_miku_bot.botextras.config import ENV_PATH, OPTIONAL_VALUES
+from botextras.config import ENV_PATH, OPTIONAL_VALUES
 from dotenv import load_dotenv
 
 

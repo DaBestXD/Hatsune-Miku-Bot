@@ -1,9 +1,9 @@
 import argparse
 import asyncio
-from hatsune_miku_bot.botconfig.bot import botsetup
-from hatsune_miku_bot.botconfig.loggerConfig import logger_config
-from hatsune_miku_bot.botextras.loadenv_values import load_env_vals
-from hatsune_miku_bot.db_stuff.db_logic import db_init, snapshot_loop
+from botconfig.bot import botsetup
+from botconfig.loggerConfig import logger_config
+from botextras.loadenv_values import load_env_vals
+from db_stuff.db_logic import db_init, snapshot_loop
 
 
 

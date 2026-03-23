@@ -4,14 +4,14 @@ import discord
 from discord import (Guild, Interaction, Member, TextChannel,
     VoiceClient,VoiceState,app_commands)
 from discord.ext import commands
-from hatsune_miku_bot.audio_utils.audio_class import Playlist
-from hatsune_miku_bot.audio_utils.audio_handler import get_Song_Info
-from hatsune_miku_bot.audio_utils.guildstate_controller import GuildStateController, QueueSongs, Skip
-from hatsune_miku_bot.audio_utils.music_queue_classes import QueueEmbed, QueueView
-from hatsune_miku_bot.audio_utils.bot_audio_functions import join_vc
-from hatsune_miku_bot.botextras.bot_events import (ClearQueue, LoopSong, Nightcore,
+from audio_utils.audio_class import Playlist
+from audio_utils.audio_handler import get_Song_Info
+from audio_utils.guildstate_controller import GuildStateController, QueueSongs, Skip
+from audio_utils.music_queue_classes import QueueEmbed, QueueView
+from audio_utils.bot_audio_functions import join_vc
+from botextras.bot_events import (ClearQueue, LoopSong, Nightcore,
     RemoveFromQueue, SetBass, SetSpeed, Shuffle, StopPlayblack, UpdateVoiceStatus, VolumeControl)
-from hatsune_miku_bot.botextras.bot_funcs_ext import reply, text_only_embed,gen_bot_thumbnail
+from botextras.bot_funcs_ext import reply, text_only_embed,gen_bot_thumbnail
 
 
 

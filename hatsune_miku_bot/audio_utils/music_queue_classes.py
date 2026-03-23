@@ -3,11 +3,11 @@ import asyncio
 import discord
 from typing import Optional, TYPE_CHECKING
 from discord import Color, Interaction, VoiceClient, ui
-from hatsune_miku_bot.audio_utils.audio_class import Playlist
-from hatsune_miku_bot.audio_utils.bot_audio_functions import join_vc
-from hatsune_miku_bot.audio_utils.guildstate_controller import GuildStateController
-from hatsune_miku_bot.botextras.bot_events import Nightcore, Shuffle, StopPlayblack
-from hatsune_miku_bot.botextras.constants import DIS_BOT_THUMBNAIL, INVIS_CHAR
+from audio_utils.audio_class import Playlist
+from audio_utils.bot_audio_functions import join_vc
+from audio_utils.guildstate_controller import GuildStateController
+from botextras.bot_events import Nightcore, Shuffle, StopPlayblack
+from botextras.constants import DIS_BOT_THUMBNAIL, INVIS_CHAR
 
 if TYPE_CHECKING:
     from cogs.musicplayer import MikuMusicCommands

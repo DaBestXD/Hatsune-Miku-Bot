@@ -2,12 +2,12 @@ import logging
 import discord
 from discord.ext.commands.cog import Cog
 from audio_utils.guildstate_controller import GuildStateController
-from hatsune_miku_bot.botextras.constants import GUILD_OBJECT
-from hatsune_miku_bot.botextras.bot_funcs_ext import owner_command, reply, text_only_embed,code_block_embed
+from botextras.constants import GUILD_OBJECT
+from botextras.bot_funcs_ext import owner_command, reply, text_only_embed,code_block_embed
 from discord.ext import commands
 from discord import Interaction, app_commands
-from hatsune_miku_bot.audio_utils.audio_class import Song
-from hatsune_miku_bot.cogs.musicplayer import MikuMusicCommands
+from audio_utils.audio_class import Song
+from cogs.musicplayer import MikuMusicCommands
 
 class botDebugger(commands.Cog):
     """
