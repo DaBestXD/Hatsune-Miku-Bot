@@ -1,9 +1,9 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from hatsune_miku_bot.botextras.bot_funcs_ext import owner_command,reply,text_only_embed,gen_bot_thumbnail
-from hatsune_miku_bot.botextras.constants import DIS_BOT_THUMBNAIL
-from hatsune_miku_bot.cogs.musicplayer import MikuMusicCommands
+from botextras.bot_funcs_ext import owner_command,reply,text_only_embed,gen_bot_thumbnail
+from botextras.constants import DIS_BOT_THUMBNAIL
+from cogs.musicplayer import MikuMusicCommands
 
 class utilCommands(commands.Cog):
     """
