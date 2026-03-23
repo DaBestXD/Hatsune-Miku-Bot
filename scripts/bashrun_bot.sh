@@ -14,4 +14,4 @@ if [ ! -x "$VENV_PYTHON" ]; then
 fi
 "$VENV_PYTHON" -m pip install -U yt-dlp
 "$VENV_PYTHON" -m yt_dlp --remote-components ejs:github --version >/dev/null
-exec "$VENV_PYTHON" "$PROJECT_ROOT/main.py" "$@"
+exec "$VENV_PYTHON" "$PROJECT_ROOT/hatsune_miku_bot/main.py" "$@"

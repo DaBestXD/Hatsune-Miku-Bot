@@ -4,6 +4,7 @@ import discord
 from typing import cast, Any
 from dotenv import load_dotenv
 from botextras.config import ENV_PATH
+from pathlib import Path
 
 load_dotenv(dotenv_path=ENV_PATH)
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -17,6 +18,7 @@ CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 #Any cast to make the type checker shut up cause importing _Params doesnt work😾
 #Something something private modules something I don't get it yet 🐱
+DB_PATH = Path(__file__).resolve().parents[2] / "data" / "status.db"
 YDL_OPTS = cast(Any,{
     "default_search": "ytsearch2",
     "js_runtimes": {"node": {}},

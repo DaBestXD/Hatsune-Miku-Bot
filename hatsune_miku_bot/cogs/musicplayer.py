@@ -94,9 +94,7 @@ class MikuMusicCommands(commands.Cog):
         if not(g_id := interaction.guild_id): return None
         if not isinstance(vc := await join_vc(interaction), VoiceClient):
             return None
-
         result =  await get_Song_Info(query)
-
         if not result:
             await reply(interaction,embed=text_only_embed(f"Error trying to play {query}"))
             return None

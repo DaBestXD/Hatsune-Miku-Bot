@@ -177,6 +177,8 @@ def sp_multi_helper_func(api_link: str, headers: dict[str,str], params: dict[str
                     spotify_url = track["external_urls"]["spotify"]
                     title = track_name + " - " + artist
                     songs.append(Song(title,spotify_url,alb_thumb_url,duration,"0"))
+                except IndexError:
+                    continue
                 except KeyError:
                     continue
                 except AttributeError:
@@ -194,6 +196,8 @@ def sp_multi_helper_func(api_link: str, headers: dict[str,str], params: dict[str
                         duration = track["duration_ms"] // 1000
                         title = track_name + " - " + artist
                         songs.append(Song(title,spotify_url,thumbnail_url,duration,"0"))
+                    except IndexError:
+                        continue
                     except KeyError:
                         continue
                     except AttributeError:

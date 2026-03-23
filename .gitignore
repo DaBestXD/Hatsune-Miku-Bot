@@ -6,4 +6,5 @@
 *.markdownlint.json
 *bot.log
 *old_files
-*test.py
+test.py
+*status.db
