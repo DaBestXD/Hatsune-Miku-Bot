@@ -85,12 +85,11 @@ class Playlist():
         return embed
 
 
-    def greatest_view_count(self) -> Song|None:
-        if self.songs:
-            _,song = max([(int(s.view_count),s) for s in self.songs if s.view_count.isnumeric()])
-            return song
-        else:
+    def greatest_view_count(self) -> Song | None:
+        valid_songs = [ s for s in self.songs if s.view_count and str(s.view_count).isnumeric()]
+        if not valid_songs:
             return None
+        return max(valid_songs, key=lambda s: int(s.view_count))
 
     def return_song_info(self, idx: int)->Song|None:
         if not self.songs:
