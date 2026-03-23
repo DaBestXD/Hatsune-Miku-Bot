@@ -23,6 +23,8 @@ services:
         "--port",
         "8000",
       ]
+    env_file:
+      - .env
     volumes:
       - ./data:/app/data
     ports:
