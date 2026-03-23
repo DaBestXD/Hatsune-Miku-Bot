@@ -5,9 +5,9 @@ from discord import Interaction
 from discord.app_commands import CheckFailure
 from discord.app_commands.errors import AppCommandError
 from discord.ext import commands
-from botextras.constants import GUILD_ID, USER_ID, DISCORD_TOKEN
-from botextras.bot_funcs_ext import reply, text_only_embed
-from db_stuff.db_logic import insert_event, utc_now_dt
+from hatsune_miku_bot.botextras.constants import GUILD_ID, USER_ID, DISCORD_TOKEN
+from hatsune_miku_bot.botextras.bot_funcs_ext import reply, text_only_embed
+from hatsune_miku_bot.db_stuff.db_logic import insert_event, utc_now_dt
 from datetime import datetime, timezone
 
 class Bot(commands.Bot):

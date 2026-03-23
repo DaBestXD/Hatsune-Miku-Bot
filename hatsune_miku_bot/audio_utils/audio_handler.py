@@ -9,7 +9,7 @@ from typing import cast
 from audio_utils.audio_class import Song, Playlist
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
-from botextras.constants import (CLIENT_ID, CLIENT_SECRET, EXTRACT_VALS,
+from hatsune_miku_bot.botextras.constants import (CLIENT_ID, CLIENT_SECRET, EXTRACT_VALS,
     EXTRACT_VALS_PLAYLIST,EXTRACT_VALS_SEARCH, SP_ALBUM_META_PARAMS,
     SP_ALBUM_PARAMS, SP_PLAYLIST_META_PARAMS, SP_PLAYLIST_PARAMS, YDL_OPTS,
     YOUTUBE, SOUNDCLOUD, SPOTIFY, SP_ALBUM_LINK, SP_TRACK_LINK,

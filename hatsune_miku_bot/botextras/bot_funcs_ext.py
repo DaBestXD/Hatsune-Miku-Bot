@@ -1,7 +1,7 @@
 from __future__ import annotations
 import discord
-from botextras.constants import USER_ID
-from botextras.config import ASSET_DIR
+from hatsune_miku_bot.botextras.constants import USER_ID
+from hatsune_miku_bot.botextras.config import ASSET_DIR
 from discord import (Color, Interaction, WebhookMessage,
     InteractionCallbackResponse,app_commands)
 

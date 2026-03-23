@@ -4,16 +4,15 @@ import logging
 import time
 import random
 from collections.abc import Awaitable, Callable
-from typing import Set
 from discord import Interaction
 from discord.ext import commands
-from audio_utils.audio_handler import get_Audio_Source
-from audio_utils.bot_audio_functions import build_audio, mod_song
-from botextras.bot_funcs_ext import reply, text_only_embed
-from botextras.bot_events import (FinishedPlayback, ClearQueue, LoopSong,
+from hatsune_miku_bot.audio_utils.audio_handler import get_Audio_Source
+from hatsune_miku_bot.audio_utils.bot_audio_functions import build_audio, mod_song
+from hatsune_miku_bot.botextras.bot_funcs_ext import reply, text_only_embed
+from hatsune_miku_bot.botextras.bot_events import (FinishedPlayback, ClearQueue, LoopSong,
     Nightcore, QueueSongs, RemoveFromQueue, SetBass, SetSpeed, Shuffle, Skip, GuildPlaybackState,
     Event, StopPlayblack, UpdateVoiceStatus, VolumeControl)
-from botextras.constants import CACHE_TIMER_S
+from hatsune_miku_bot.botextras.constants import CACHE_TIMER_S
 
 EventHandler = Callable[[Event], Awaitable[None]]
 

@@ -7,8 +7,8 @@ router = APIRouter()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://YOUR_GITHUB_USERNAME.github.io",
-        "https://YOUR_GITHUB_USERNAME.github.io/YOUR_REPO_NAME",
+        "https://dabestxd.github.io",
+        "https://dabesxd.github.io/YOUR_REPO_NAME",
     ],
     allow_credentials=False,
     allow_methods=["GET"],

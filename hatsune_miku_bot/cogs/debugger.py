@@ -2,12 +2,12 @@ import logging
 import discord
 from discord.ext.commands.cog import Cog
 from audio_utils.guildstate_controller import GuildStateController
-from botextras.constants import GUILD_OBJECT
-from botextras.bot_funcs_ext import owner_command, reply, text_only_embed,code_block_embed
+from hatsune_miku_bot.botextras.constants import GUILD_OBJECT
+from hatsune_miku_bot.botextras.bot_funcs_ext import owner_command, reply, text_only_embed,code_block_embed
 from discord.ext import commands
 from discord import Interaction, app_commands
-from audio_utils.audio_class import Song
-from cogs.musicplayer import MikuMusicCommands
+from hatsune_miku_bot.audio_utils.audio_class import Song
+from hatsune_miku_bot.cogs.musicplayer import MikuMusicCommands
 
 class botDebugger(commands.Cog):
     """
@@ -48,6 +48,7 @@ class botDebugger(commands.Cog):
         queue_preview = "\n".join(
             f"{idx}. {title}" for idx, title in enumerate(preview_songs)
         ) or "Queue empty"
+        # TODO fix later this will break when called
         mods = state.song_mods if state.song_mods else "None"
         if len(mods) > 120:
             mods = mods[:117] + "..."
