@@ -3,7 +3,9 @@ from dotenv import load_dotenv
 
 
 def env_vals_input(value: str) -> str | None:
-    optional = "(Optional value hit enter for none value)" if value in OPTIONAL_VALUES else ""
+    optional = (
+        "(Optional value hit enter for none value)" if value in OPTIONAL_VALUES else ""
+    )
     while True:
         env_val = input(f"Enter {value}{optional}: ").strip()
         response = input(f"{value}: {env_val} \nCorrect value? (y/n): ")

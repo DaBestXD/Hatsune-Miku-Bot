@@ -5,17 +5,48 @@ import requests
 import base64
 import warnings
 import asyncio
+import time
 from typing import cast
 from audio_utils.audio_class import Song, Playlist
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
+from urllib.parse import quote_plus
 from botextras.constants import (CLIENT_ID, CLIENT_SECRET, EXTRACT_VALS,
     EXTRACT_VALS_PLAYLIST,EXTRACT_VALS_SEARCH, SP_ALBUM_META_PARAMS,
-    SP_ALBUM_PARAMS, SP_PLAYLIST_META_PARAMS, SP_PLAYLIST_PARAMS, YDL_OPTS,
+    SP_ALBUM_PARAMS, SP_PLAYLIST_META_PARAMS, SP_PLAYLIST_PARAMS, SPOTIFY_REQUEST_TIMEOUT_S, SPOTIFY_RETRY_DELAYS_S, SPOTIFY_RETRY_STATUSES, YDL_OPTS,
     YOUTUBE, SOUNDCLOUD, SPOTIFY, SP_ALBUM_LINK, SP_TRACK_LINK,
     SP_PLAYLIST_LINK,AUDIO_OPTS)
 
 logger = logging.getLogger(__name__)
+
+
+def spotify_request(method: str, url: str, **kwargs) -> requests.Response | None:
+    max_attempts = len(SPOTIFY_RETRY_DELAYS_S) + 1
+    kwargs.setdefault("timeout", SPOTIFY_REQUEST_TIMEOUT_S)
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = requests.request(method, url, **kwargs)
+        except requests.RequestException as e:
+            if attempt == max_attempts:
+                logger.error( "Spotify %s request failed for %s after %d attempts: %s",
+                    method.upper(), url, attempt, e,
+                )
+                return None
+            logger.warning(
+                "Spotify %s request error for %s (attempt %d/%d): %s",
+                method.upper(), url, attempt, max_attempts, e,
+            )
+        else:
+            if response.status_code not in SPOTIFY_RETRY_STATUSES:
+                return response
+            if attempt == max_attempts:
+                return response
+            logger.warning(
+                "Spotify %s request to %s returned [%d] (attempt %d/%d)",
+                method.upper(), url, response.status_code, attempt, max_attempts,
+            )
+        time.sleep(SPOTIFY_RETRY_DELAYS_S[attempt - 1])
+    return None
 
 def yt_json_parser(entries: list[dict[str,str|None]], extract_items: tuple[str,...])->list[Song]|None:
     return_val:list[Song] = []
@@ -48,7 +79,8 @@ def get_token() -> None | str:
     auth_string = CLIENT_ID + ":" + CLIENT_SECRET
     auth_bytes = auth_string.encode("utf-8")
     auth_base64 = str(base64.b64encode(auth_bytes), "utf-8")
-    token_res = requests.post(
+    token_res = spotify_request(
+        "post",
         "https://accounts.spotify.com/api/token",
         headers={
             "Authorization": f"Basic {auth_base64}",
@@ -56,6 +88,8 @@ def get_token() -> None | str:
         },
         data={"grant_type": "client_credentials"},
     )
+    if not token_res:
+        return None
     if token_res.status_code == 200:
         token = token_res.json()["access_token"]
         return token
@@ -159,7 +193,9 @@ def get_Soundcloud_Info(url: str) -> Song| None:
 def sp_multi_helper_func(api_link: str, headers: dict[str,str], params: dict[str,str] | None, path_type: str, alb_thumb_url: str = "None")-> list[Song] | None:
     songs: list[Song] = []
     while api_link:
-        r = requests.get(url=api_link, headers=headers, params=params)
+        r = spotify_request("get", api_link, headers=headers, params=params)
+        if not r:
+            return None
         if r.status_code != 200:
             logger.error("Sp_multi_helpfunc http error: [%d]", r.status_code)
             return None
@@ -177,13 +213,7 @@ def sp_multi_helper_func(api_link: str, headers: dict[str,str], params: dict[str
                     spotify_url = track["external_urls"]["spotify"]
                     title = track_name + " - " + artist
                     songs.append(Song(title,spotify_url,alb_thumb_url,duration,"0"))
-                except IndexError:
-                    continue
-                except KeyError:
-                    continue
-                except AttributeError:
-                    continue
-                except TypeError:
+                except (IndexError, KeyError, AttributeError, TypeError):
                     continue
         if path_type == "playlist":
             for song in items:
@@ -196,13 +226,7 @@ def sp_multi_helper_func(api_link: str, headers: dict[str,str], params: dict[str
                         duration = track["duration_ms"] // 1000
                         title = track_name + " - " + artist
                         songs.append(Song(title,spotify_url,thumbnail_url,duration,"0"))
-                    except IndexError:
-                        continue
-                    except KeyError:
-                        continue
-                    except AttributeError:
-                        continue
-                    except TypeError:
+                    except (IndexError, KeyError, AttributeError, TypeError):
                         continue
         api_link = song_json.get("next")
         params = None
@@ -210,13 +234,17 @@ def sp_multi_helper_func(api_link: str, headers: dict[str,str], params: dict[str
 # TODO oh my god... Fix this
 def get_spotify_info(path_type: str, id: str) -> Playlist|Song|None:
     token = get_token()
+    if not token:
+        return None
     headers = {"Authorization" : f"Bearer {token}"}
     songs:list[Song]|None = []
     if "/album/" in path_type:
         api_link = SP_ALBUM_LINK + id + "/tracks"
         album_name: str = "Unknown"
         album_thumbnail: str = "None"
-        r = requests.get(url=(SP_ALBUM_LINK+id),headers=headers,params=SP_ALBUM_META_PARAMS)
+        r = spotify_request("get", SP_ALBUM_LINK + id, headers=headers, params=SP_ALBUM_META_PARAMS,)
+        if not r:
+            return None
         if r.status_code == 200:
             try:
                 album_json = r.json()
@@ -235,16 +263,23 @@ def get_spotify_info(path_type: str, id: str) -> Playlist|Song|None:
         songs = sp_multi_helper_func(api_link,headers,params,path_type="playlist")
         if not songs:
             return None
-        r = requests.get(url=(SP_PLAYLIST_LINK+id), headers=headers, params=SP_PLAYLIST_META_PARAMS)
+        r = spotify_request("get", SP_PLAYLIST_LINK + id, headers=headers, params=SP_PLAYLIST_META_PARAMS,)
+        if not r:
+            return None
         if r.status_code == 200:
             playlist_json = r.json()
-            playlist_thumbnail = playlist_json["images"][0]["url"]
-            playlist_name = playlist_json["name"]
+            try:
+                playlist_thumbnail = playlist_json["images"][0]["url"]
+            except (KeyError, IndexError):
+                playlist_thumbnail = "None"
+            playlist_name = playlist_json.get("name") or "Unknown Name"
             return Playlist(songs,playlist_name,path_type,playlist_thumbnail)
     elif "/track/" in path_type:
         api_link = SP_TRACK_LINK + id
         params = {"market": "US"}
-        r = requests.get(url=api_link, headers=headers, params=params)
+        r = spotify_request("get", api_link, headers=headers, params=params)
+        if not r:
+            return None
         if r.status_code != 200:
             logger.error("Spotify http error [%d]", r.status_code)
             return None
@@ -256,9 +291,7 @@ def get_spotify_info(path_type: str, id: str) -> Playlist|Song|None:
             song_artist = song_json["artists"][0]["name"]
             song_title: str = song_name + " - " + song_artist
             return Song(song_title,path_type,thumbnail,duration,"0")
-        except AttributeError:
-            return None
-        except TypeError:
+        except (AttributeError, TypeError, IndexError):
             return None
     return None
 
@@ -283,27 +316,27 @@ def _get_Song_Info(url: str) -> Playlist|Song|None:
 async def get_Song_Info(url: str):
     return await asyncio.to_thread(_get_Song_Info, url)
 
-def _get_Audio_Source(query: tuple[str,str]) -> str | None:
+def _get_Audio_Source(query: Song) -> str | None:
     try:
         with YoutubeDL(AUDIO_OPTS) as ydl:
-            title, og_url = query
-            if "spotify" in og_url:
-                result = ydl.extract_info(f"ytsearch2:{title}", download=False)
+            if "spotify" in query.webpage_url:
+                music_search_url = f"https://music.youtube.com/search?q={quote_plus(query.title)}#songs"
+                result = ydl.extract_info(music_search_url, download=False)
                 entries = result.get("entries")
-                songs = []
+                songs:list[tuple[int,str|None]] = []
                 if not entries:
-                    logger.info("Unable to find entries for %s, link: %s", title, og_url)
+                    logger.info("Unable to find entries for %s, link: %s", query.title, query.webpage_url)
                     return None
                 for n in entries:
-                    url = n.get("url")
-                    view_count:int|None = n.get("view_count")
+                    url = n.get("url") or None
+                    view_count:int = n.get("view_count") or 0
                     songs.append((view_count, url))
                 _, url = max(songs)
-                logger.info("Loaded audio for spotify link: %s, %s", title , og_url)
+                logger.info("Loaded audio for spotify link: %s, %s", query.title , query.webpage_url)
                 return url
             else:
-                result = ydl.extract_info(url=og_url,download=False)
-                logger.info("Loaded audio for non-spotify link: %s, %s", title ,og_url.replace("https://", ""))
+                result = ydl.extract_info(url=query.webpage_url,download=False)
+                logger.info("Loaded audio for non-spotify link: %s, %s", query.title,query.webpage_url.replace("https://", ""))
                 return result.get("url")
     except DownloadError as e:
         logger.error("Audio source download error: %s", e)
@@ -312,5 +345,5 @@ def _get_Audio_Source(query: tuple[str,str]) -> str | None:
         logger.critical("Audio failed in unexpected way: %s", e)
         return None
 
-async def get_Audio_Source(query: tuple[str,str]):
+async def get_Audio_Source(query: Song):
     return await asyncio.to_thread(_get_Audio_Source, query)

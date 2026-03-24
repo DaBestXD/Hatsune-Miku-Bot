@@ -16,4 +16,3 @@ CREATE_SNAPSHOTS = """
     uptime_seconds INTEGER NOT NULL
     )
     """
-

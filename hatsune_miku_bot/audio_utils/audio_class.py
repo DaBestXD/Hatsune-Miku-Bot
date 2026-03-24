@@ -18,6 +18,7 @@ class Song():
             self.duration = 0
             self.formatted_duration = "0"
         self.view_count:str = view_count
+        self.source = ""
 
     def return_embed(self, next_song: Song|None = None, queued: bool = False, char_limit: int = 30) -> discord.Embed:
         author_title = "Song added to queue:" if queued else "Now playing:"

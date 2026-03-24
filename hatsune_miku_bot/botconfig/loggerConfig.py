@@ -21,7 +21,8 @@ class ColorFormatter(logging.Formatter):
         return out
 
 def logger_config() -> None:
-    log_dir = Path("./logs")
+    bot_root = Path(__file__).resolve().parents[2]
+    log_dir = bot_root / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / "bot.log"
 
