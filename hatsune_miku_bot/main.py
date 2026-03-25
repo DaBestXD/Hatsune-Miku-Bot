@@ -10,12 +10,8 @@ from db_stuff.db_logic import db_init, snapshot_loop
 async def main() -> None:
     await db_init()
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-d", "--docker", help="Used for docker run.", action="store_true"
-    )
-    parser.add_argument(
-        "-D", "--debugger", help="Launch bot with debug commands", action="store_true"
-    )
+    parser.add_argument("-d", "--docker", help="Used for docker run.", action="store_true")
+    parser.add_argument("-D", "--debugger", help="Launch bot with debug commands", action="store_true")
     args = parser.parse_args()
     if not args.docker:
         load_env_vals()
@@ -33,4 +29,7 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass

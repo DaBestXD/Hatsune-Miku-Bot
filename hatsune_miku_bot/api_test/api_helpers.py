@@ -48,7 +48,7 @@ async def all_uptime_windows() -> dict[str, float]:
 async def last_n_events(n: int) -> dict[str, list[str]]:
     async with aiosqlite.connect(DB_PATH) as con:
         query = """
-            SELECT details FROM events LIMIT :n
+            SELECT details FROM events ORDER BY id DESC limit :n
         """
         args = {"n": n}
         cur = await con.execute(query, args)

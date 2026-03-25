@@ -1,4 +1,5 @@
 .git/
+.github/
 EnvHatsuneMiku/
 HatsuneMikuENV/
 __pycache__/
@@ -9,7 +10,11 @@ __pycache__/
 .venv/
 .env
 .env.*
+**/.env
+**/.env.*
 logs/
+data/
+*.db
 old_files/
 tests/
 docs/
@@ -20,3 +25,7 @@ test.py
 pyrightconfig.json
 lazyrun.sh
 .markdownlint.json
+README.md
+requirements.in
+scripts/
+.DS_Store

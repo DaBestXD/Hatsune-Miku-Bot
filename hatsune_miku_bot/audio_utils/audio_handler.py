@@ -331,6 +331,8 @@ def _get_Audio_Source(query: Song) -> str | None:
                     url = n.get("url") or None
                     view_count:int = n.get("view_count") or 0
                     songs.append((view_count, url))
+                # Possibily change this to compare artist title to channel for better results
+                # then fall back on view count after no match
                 _, url = max(songs)
                 logger.info("Loaded audio for spotify link: %s, %s", query.title , query.webpage_url)
                 return url
