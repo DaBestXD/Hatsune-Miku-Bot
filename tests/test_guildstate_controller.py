@@ -5,14 +5,13 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
-try:
-    from tests import _bootstrap
-except ImportError:
-    import _bootstrap
-
-from audio_utils.audio_class import Song
-from audio_utils.guildstate_controller import GuildStateController
-from botextras.bot_events import FinishedPlayback, QueueSongs, StopPlayblack
+from hatsune_miku_bot.audio_utils.audio_class import Song
+from hatsune_miku_bot.audio_utils.guildstate_controller import GuildStateController
+from hatsune_miku_bot.botextras.bot_events import (
+    FinishedPlayback,
+    QueueSongs,
+    StopPlayblack,
+)
 
 
 def make_song(title: str, url: str) -> Song:
@@ -36,7 +35,10 @@ class GuildStateControllerTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with (
-            patch("audio_utils.guildstate_controller.reply", new=AsyncMock()) as reply_mock,
+            patch(
+                "hatsune_miku_bot.audio_utils.guildstate_controller.reply",
+                new=AsyncMock(),
+            ) as reply_mock,
             patch.object(controller, "_play", new=AsyncMock()) as play_mock,
         ):
             await controller._handle_queue_songs(event)
@@ -63,12 +65,12 @@ class GuildStateControllerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "audio_utils.guildstate_controller.get_Audio_Source",
+                "hatsune_miku_bot.audio_utils.guildstate_controller.get_Audio_Source",
                 new=AsyncMock(side_effect=[None, "https://audio.test/stream"]),
             ) as get_audio_mock,
             patch.object(controller, "bad_cache", new=AsyncMock()) as bad_cache_mock,
             patch(
-                "audio_utils.guildstate_controller.asyncio.to_thread",
+                "hatsune_miku_bot.audio_utils.guildstate_controller.asyncio.to_thread",
                 new=AsyncMock(return_value=built_source),
             ) as to_thread_mock,
         ):
@@ -125,7 +127,10 @@ class GuildStateControllerTests(unittest.IsolatedAsyncioTestCase):
         controller.state.song_speed = "speed"
         controller.state.vc = voice_client
 
-        with patch("audio_utils.guildstate_controller.reply", new=AsyncMock()) as reply_mock:
+        with patch(
+            "hatsune_miku_bot.audio_utils.guildstate_controller.reply",
+            new=AsyncMock(),
+        ) as reply_mock:
             await controller._stop_playback(StopPlayblack(object()))
 
         self.assertIsNone(controller.state.active_song)

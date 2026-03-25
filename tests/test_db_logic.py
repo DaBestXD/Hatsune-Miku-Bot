@@ -7,14 +7,9 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
-try:
-    from tests import _bootstrap
-except ImportError:
-    import _bootstrap
-
-import db_stuff.db_logic as db_logic
+import hatsune_miku_bot.db_stuff.db_logic as db_logic
 
 
 class DbLogicTests(unittest.IsolatedAsyncioTestCase):

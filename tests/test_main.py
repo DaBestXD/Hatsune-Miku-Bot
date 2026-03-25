@@ -5,11 +5,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-try:
-    from tests import _bootstrap
-except ImportError:
-    import _bootstrap
-import main
+import hatsune_miku_bot.main as main
 
 
 class MainLifecycleTests(unittest.IsolatedAsyncioTestCase):

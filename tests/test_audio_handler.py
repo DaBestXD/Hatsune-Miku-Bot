@@ -4,12 +4,8 @@ import requests
 import unittest
 from unittest.mock import MagicMock, Mock, call, patch
 
-try:
-    from tests import _bootstrap
-except ImportError:
-    import _bootstrap
-import audio_utils.audio_handler as audio_handler
-from audio_utils.audio_class import Song
+import hatsune_miku_bot.audio_utils.audio_handler as audio_handler
+from hatsune_miku_bot.audio_utils.audio_class import Song
 
 
 class SpotifyRequestTests(unittest.TestCase):
