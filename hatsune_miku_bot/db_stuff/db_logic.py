@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 
 async def db_init():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as con:
         await con.execute(CREATE_EVENTS)
         await con.execute(CREATE_SNAPSHOTS)

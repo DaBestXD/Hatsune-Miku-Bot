@@ -21,7 +21,7 @@ RUN python -m pip install --upgrade pip \
 
 COPY . .
 
-RUN mkdir -p /app/logs
+RUN mkdir -p /app/logs /app/data
 
 
 CMD ["python", "hatsune_miku_bot/main.py", "--docker"]
