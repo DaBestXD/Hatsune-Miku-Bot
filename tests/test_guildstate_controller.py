@@ -104,6 +104,66 @@ class GuildStateControllerTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(first_song.webpage_url, controller.state.song_cache)
         play_mock.assert_awaited_once_with()
 
+    async def test_song_mod_helper_uses_rate_adjusted_song_position(self) -> None:
+        bot = SimpleNamespace(loop=asyncio.get_running_loop())
+        controller = GuildStateController(bot, 42)
+        song = make_song("Song One", "https://song.test/1")
+        voice_client = SimpleNamespace(stop=Mock())
+        controller.state.active_song = song
+        controller.state.songs = [song]
+        controller.state.vc = voice_client
+        controller.state.start_time = 100.0
+        controller.state.position_offset_s = 30.0
+        controller.state.song_speed = ",atempo=1.5"
+        controller.state.nightcore = True
+
+        with (
+            patch(
+                "hatsune_miku_bot.audio_utils.guildstate_controller.reply",
+                new=AsyncMock(),
+            ) as reply_mock,
+            patch(
+                "hatsune_miku_bot.audio_utils.guildstate_controller.time.monotonic",
+                return_value=110.0,
+            ),
+        ):
+            await controller._song_mod_helper(object(), "Bass set!")
+
+        self.assertEqual(controller.state.songs, [song, song])
+        self.assertAlmostEqual(controller.state.seek_time or 0.0, 48.75)
+        voice_client.stop.assert_called_once_with()
+        reply_mock.assert_awaited_once()
+
+    async def test_setspeed_snapshots_position_before_updating_rate(self) -> None:
+        from botextras.bot_events import SetSpeed as RuntimeSetSpeed
+
+        bot = SimpleNamespace(loop=asyncio.get_running_loop())
+        controller = GuildStateController(bot, 42)
+        song = make_song("Song One", "https://song.test/1")
+        controller.state.active_song = song
+        controller.state.songs = [song]
+        controller.state.start_time = 100.0
+        controller.state.position_offset_s = 30.0
+        controller.state.song_speed = ",atempo=1.5"
+
+        with (
+            patch(
+                "hatsune_miku_bot.audio_utils.guildstate_controller.mod_song",
+                new=AsyncMock(return_value=",atempo=2.0"),
+            ),
+            patch(
+                "hatsune_miku_bot.audio_utils.guildstate_controller.time.monotonic",
+                return_value=110.0,
+            ),
+            patch.object(controller, "_song_mod_helper", new=AsyncMock()) as helper_mock,
+        ):
+            await controller._setspeed(RuntimeSetSpeed(object(), object(), 2.0))
+
+        self.assertEqual(controller.state.song_speed, ",atempo=2.0")
+        self.assertTrue(controller.state.mod_song)
+        helper_mock.assert_awaited_once()
+        self.assertEqual(helper_mock.await_args.args[2], 45.0)
+
     async def test_stop_playback_resets_state_and_disconnects_voice_client(self) -> None:
         bot = SimpleNamespace(loop=asyncio.get_running_loop())
         controller = GuildStateController(bot, 42)
@@ -115,6 +175,7 @@ class GuildStateControllerTests(unittest.IsolatedAsyncioTestCase):
         )
         controller.state.active_song = song
         controller.state.songs = [song]
+        controller.state.position_offset_s = 20.0
         controller.state.seek_time = 15.0
         controller.state.text_channel = object()
         controller.state.start_time = 10.0
@@ -135,6 +196,7 @@ class GuildStateControllerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(controller.state.active_song)
         self.assertEqual(controller.state.songs, [])
+        self.assertEqual(controller.state.position_offset_s, 0.0)
         self.assertIsNone(controller.state.seek_time)
         self.assertIsNone(controller.state.text_channel)
         self.assertIsNone(controller.state.start_time)

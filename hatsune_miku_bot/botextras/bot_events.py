@@ -16,6 +16,7 @@ class GuildPlaybackState:
     source: PCMVolumeTransformer | None = None
     song_loop: bool = False
     start_time: float | None = None
+    position_offset_s: float = 0.0
     seek_time: float | None = None
     song_bass: str = ""
     song_speed: str = ""

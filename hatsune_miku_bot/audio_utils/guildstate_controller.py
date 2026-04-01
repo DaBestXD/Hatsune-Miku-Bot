@@ -199,6 +199,25 @@ class GuildStateController:
         self.state.vc = event.vc
         return None
 
+    def _playback_rate(self) -> float:
+        rate = 1.25 if self.state.nightcore else 1.0
+        if self.state.song_speed:
+            try:
+                rate *= float(self.state.song_speed.removeprefix(",atempo="))
+            except ValueError:
+                self.logger.warning(
+                    "Failed to parse playback speed for guild %s: %r",
+                    self.id,
+                    self.state.song_speed,
+                )
+        return rate
+
+    def _current_song_position(self) -> float:
+        if self.state.start_time is None:
+            return self.state.position_offset_s
+        elapsed_s = max(0.0, time.monotonic() - self.state.start_time)
+        return self.state.position_offset_s + (elapsed_s * self._playback_rate())
+
     async def _play(self) -> None:
         song = self.state.active_song
         if song and self.state.vc:
@@ -236,8 +255,10 @@ class GuildStateController:
                     error, stderr_buff
                 ),
             )
+            self.state.position_offset_s = seek_time
+            self.state.start_time = time.monotonic()
+            self.state.seek_time = None
             if not self.state.mod_song:
-                self.state.start_time = time.monotonic()
                 if self.state.text_channel:
                     next_song = (
                         self.state.songs[1] if len(self.state.songs) >= 2 else None
@@ -247,7 +268,6 @@ class GuildStateController:
                     )
             else:
                 self.state.mod_song = False
-                self.state.seek_time = None
             self.state.song_cache[song.webpage_url] = source
             await self.bad_cache()
         else:
@@ -315,11 +335,19 @@ class GuildStateController:
         await self.bad_cache()
         return None
 
-    async def _song_mod_helper(self, interaction: Interaction, text: str) -> None:
+    async def _song_mod_helper(
+        self,
+        interaction: Interaction,
+        text: str,
+        resume_position_s: float | None = None,
+    ) -> None:
         if self.state.vc and self.state.active_song:
             self.state.songs.insert(1, self.state.active_song)
-            if self.state.start_time:
-                self.state.seek_time = time.monotonic() - self.state.start_time
+            self.state.seek_time = (
+                resume_position_s
+                if resume_position_s is not None
+                else self._current_song_position()
+            )
             self.state.vc.stop()
             await reply(interaction, embed=text_only_embed(text))
         return None
@@ -327,6 +355,7 @@ class GuildStateController:
     async def _nightcore(self, event: Event) -> None:
         if not isinstance(event, Nightcore):
             return None
+        resume_position_s = self._current_song_position()
         self.state.song_pitch = (
             await mod_song("pitch", 1.25)
             if not self.state.song_pitch
@@ -335,7 +364,7 @@ class GuildStateController:
         self.state.mod_song = True
         text = "Nightcore on!🙀" if not self.state.nightcore else "Nightcore off!😿"
         self.state.nightcore = not self.state.nightcore
-        await self._song_mod_helper(event.interaction, text)
+        await self._song_mod_helper(event.interaction, text, resume_position_s)
         if event.done and not event.done.done():
             event.done.set_result(None)
         return None
@@ -354,18 +383,20 @@ class GuildStateController:
     async def _setspeed(self, event: Event) -> None:
         if not isinstance(event, SetSpeed):
             return None
+        resume_position_s = self._current_song_position()
         self.state.song_speed = await mod_song(
             "speed", effect_strength=event.effect_strength
         )
         self.state.mod_song = True
         text = f"Speed set to {event.effect_strength}!"
-        await self._song_mod_helper(event.interaction, text)
+        await self._song_mod_helper(event.interaction, text, resume_position_s)
         return None
 
     async def _stop_playback(self, event: Event) -> None:
         if not isinstance(event, StopPlayblack):
             return None
         self.state.active_song = None
+        self.state.position_offset_s = 0.0
         self.state.seek_time = None
         self.state.text_channel = None
         self.state.start_time = None
