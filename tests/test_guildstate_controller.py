@@ -5,9 +5,9 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
-from hatsune_miku_bot.audio_utils.audio_class import Song
-from hatsune_miku_bot.audio_utils.guildstate_controller import GuildStateController
-from hatsune_miku_bot.botextras.bot_events import (
+from audio_utils.audio_class import Song
+from audio_utils.guildstate_controller import GuildStateController
+from botextras.bot_events import (
     FinishedPlayback,
     QueueSongs,
     StopPlayblack,
@@ -36,7 +36,7 @@ class GuildStateControllerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "hatsune_miku_bot.audio_utils.guildstate_controller.reply",
+                "audio_utils.guildstate_controller.reply",
                 new=AsyncMock(),
             ) as reply_mock,
             patch.object(controller, "_play", new=AsyncMock()) as play_mock,
@@ -65,12 +65,12 @@ class GuildStateControllerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "hatsune_miku_bot.audio_utils.guildstate_controller.get_Audio_Source",
+                "audio_utils.guildstate_controller.get_Audio_Source",
                 new=AsyncMock(side_effect=[None, "https://audio.test/stream"]),
             ) as get_audio_mock,
             patch.object(controller, "bad_cache", new=AsyncMock()) as bad_cache_mock,
             patch(
-                "hatsune_miku_bot.audio_utils.guildstate_controller.asyncio.to_thread",
+                "audio_utils.guildstate_controller.asyncio.to_thread",
                 new=AsyncMock(return_value=built_source),
             ) as to_thread_mock,
         ):
@@ -119,11 +119,11 @@ class GuildStateControllerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "hatsune_miku_bot.audio_utils.guildstate_controller.reply",
+                "audio_utils.guildstate_controller.reply",
                 new=AsyncMock(),
             ) as reply_mock,
             patch(
-                "hatsune_miku_bot.audio_utils.guildstate_controller.time.monotonic",
+                "audio_utils.guildstate_controller.time.monotonic",
                 return_value=110.0,
             ),
         ):
@@ -148,11 +148,11 @@ class GuildStateControllerTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch(
-                "hatsune_miku_bot.audio_utils.guildstate_controller.mod_song",
+                "audio_utils.guildstate_controller.mod_song",
                 new=AsyncMock(return_value=",atempo=2.0"),
             ),
             patch(
-                "hatsune_miku_bot.audio_utils.guildstate_controller.time.monotonic",
+                "audio_utils.guildstate_controller.time.monotonic",
                 return_value=110.0,
             ),
             patch.object(controller, "_song_mod_helper", new=AsyncMock()) as helper_mock,
@@ -189,7 +189,7 @@ class GuildStateControllerTests(unittest.IsolatedAsyncioTestCase):
         controller.state.vc = voice_client
 
         with patch(
-            "hatsune_miku_bot.audio_utils.guildstate_controller.reply",
+            "audio_utils.guildstate_controller.reply",
             new=AsyncMock(),
         ) as reply_mock:
             await controller._stop_playback(StopPlayblack(object()))
