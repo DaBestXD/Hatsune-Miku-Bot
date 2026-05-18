@@ -1,17 +1,14 @@
 $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Split-Path $PSScriptRoot -Parent
-$EnvPath = Join-Path $ProjectRoot "EnvHatsuneMiku"
-$VenvPython = Join-Path $EnvPath "Scripts\python.exe"
 $SetupScript = Join-Path $PSScriptRoot "windows_botsetup.ps1"
-$MainPath = Join-Path $ProjectRoot "main.py"
-
 Set-Location $ProjectRoot
 
-if (-not (Test-Path $VenvPython)) {
-  Write-Host "Virtual environment not found. Running setup first."
+if (-not (Get-Command uv -ErrorAction SilentlyContinue) -or -not (Test-Path (Join-Path $ProjectRoot ".venv"))) {
+  Write-Host "uv environment not ready. Running setup first."
   & $SetupScript
 }
 
-& $VenvPython $MainPath @args
+uv run python -m yt_dlp --remote-components ejs:github --version | Out-Null
+uv run hatsune-miku-bot @args
 exit $LASTEXITCODE

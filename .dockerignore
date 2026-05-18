@@ -18,7 +18,5 @@ githubpictures/
 test.py
 pyrightconfig.json
 .markdownlint.json
-README.md
-requirements.in
 scripts/
 .DS_Store

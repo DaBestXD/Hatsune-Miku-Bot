@@ -43,6 +43,7 @@ and both `USER_ID` and `GUILD_ID` are set.
 Local/runtime requirements:
 
 - Python `3.14`
+- `uv`
 - `ffmpeg`
 - `node`
 
@@ -67,6 +68,32 @@ USER_ID=
 GUILD_ID=
 ```
 
+## Local Setup
+
+Install dependencies into the project `.venv`:
+
+```bash
+uv sync
+```
+
+Run the bot:
+
+```bash
+uv run hatsune-miku-bot
+```
+
+Run with debugger commands:
+
+```bash
+uv run hatsune-miku-bot --debugger
+```
+
+Run tests:
+
+```bash
+uv run python -m unittest discover -s tests -t .
+```
+
 ## Docker Setup
 
 Build the image:
@@ -86,4 +113,3 @@ docker run -d \
   --restart unless-stopped \
   hatsune-miku-bot
 ```
-

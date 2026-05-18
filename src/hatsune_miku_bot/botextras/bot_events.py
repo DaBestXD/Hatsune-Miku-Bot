@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass, field
-from audio_utils.audio_class import Song, Playlist
+from hatsune_miku_bot.audio_utils.audio_class import Song, Playlist
 from discord import PCMVolumeTransformer, TextChannel, VoiceClient, Interaction
 from typing import Optional
 

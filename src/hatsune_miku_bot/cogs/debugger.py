@@ -1,9 +1,8 @@
 import logging
 import discord
-from discord.ext.commands.cog import Cog
-from audio_utils.guildstate_controller import GuildStateController
-from botextras.constants import GUILD_OBJECT
-from botextras.bot_funcs_ext import (
+from hatsune_miku_bot.audio_utils.guildstate_controller import GuildStateController
+from hatsune_miku_bot.botextras.constants import GUILD_OBJECT
+from hatsune_miku_bot.botextras.bot_funcs_ext import (
     owner_command,
     reply,
     text_only_embed,
@@ -11,8 +10,8 @@ from botextras.bot_funcs_ext import (
 )
 from discord.ext import commands
 from discord import Interaction, app_commands
-from audio_utils.audio_class import Song
-from cogs.musicplayer import MikuMusicCommands
+from hatsune_miku_bot.audio_utils.audio_class import Song
+from hatsune_miku_bot.cogs.musicplayer import MikuMusicCommands
 
 
 class botDebugger(commands.Cog):
@@ -43,7 +42,7 @@ class botDebugger(commands.Cog):
     ) -> list[app_commands.Choice[str]]:
         return [app_commands.Choice(name=s, value=s) for s in self.bot.extensions]
 
-    def return_commands_embed(self, cog: Cog) -> discord.Embed:
+    def return_commands_embed(self, cog: commands.Cog) -> discord.Embed:
         return code_block_embed(
             txt=[i.name for i in cog.__cog_app_commands__], title=cog.__class__.__name__
         )
@@ -96,7 +95,11 @@ class botDebugger(commands.Cog):
             ),
             inline=False,
         )
-        embed.add_field(name="Song Mods", value=f"`{state.song_pitch, state.song_speed, state.song_bass}`", inline=False)
+        embed.add_field(
+            name="Song Mods",
+            value=f"`{state.song_pitch, state.song_speed, state.song_bass}`",
+            inline=False,
+        )
         embed.add_field(name="Queue Preview", value=queue_preview, inline=False)
         return embed
 

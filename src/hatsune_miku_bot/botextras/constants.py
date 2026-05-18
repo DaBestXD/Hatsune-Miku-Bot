@@ -3,13 +3,11 @@ import os
 import discord
 from typing import cast, Any
 from dotenv import load_dotenv
-from botextras.config import ENV_PATH
-from pathlib import Path
+from hatsune_miku_bot.botextras.config import ENV_PATH, PROJECT_ROOT
 
 load_dotenv(dotenv_path=ENV_PATH)
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = os.getenv("GUILD_ID")
-assert DISCORD_TOKEN, "Discord token cannot be none"
 USER_ID = os.getenv("USER_ID")
 USER_ID = None if not USER_ID else int(USER_ID)
 if GUILD_ID:
@@ -18,7 +16,7 @@ CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 # Any cast to make the type checker shut up cause importing _Params doesnt work😾
 # Something something private modules something I don't get it yet 🐱
-DB_PATH = Path(__file__).resolve().parents[2] / "data" / "status.db"
+DB_PATH = PROJECT_ROOT / "data" / "status.db"
 YDL_OPTS = cast(
     Any,
     {

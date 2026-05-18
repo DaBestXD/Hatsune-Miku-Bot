@@ -1,27 +1,14 @@
 $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Split-Path $PSScriptRoot -Parent
-$EnvPath = Join-Path $ProjectRoot "EnvHatsuneMiku"
-$VenvPython = Join-Path $EnvPath "Scripts\python.exe"
-$RequirementsPath = Join-Path $ProjectRoot "requirements.txt"
 
 Set-Location $ProjectRoot
 
-if (-not (Test-Path $EnvPath)) {
-  Write-Host "Creating virtual environment at $EnvPath"
-  if (Get-Command py -ErrorAction SilentlyContinue) {
-    & py -3 -m venv $EnvPath
-  } elseif (Get-Command python -ErrorAction SilentlyContinue) {
-    & python -m venv $EnvPath
-  } else {
-    throw "Python 3 was not found in PATH."
-  }
-} else {
-  Write-Host "Virtual environment already exists at $EnvPath"
+if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+  throw "uv was not found in PATH. Install it from https://docs.astral.sh/uv/ and rerun this script."
 }
 
-& $VenvPython -m pip install --upgrade pip
-& $VenvPython -m pip install -r $RequirementsPath
+uv sync
 
 if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
   if (Get-Command winget -ErrorAction SilentlyContinue) {

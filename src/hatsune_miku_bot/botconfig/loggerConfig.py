@@ -1,6 +1,6 @@
 import logging
 import sys
-from pathlib import Path
+from hatsune_miku_bot.botextras.config import PROJECT_ROOT
 
 class ColorFormatter(logging.Formatter):
     RESET = "\033[0m"
@@ -21,8 +21,7 @@ class ColorFormatter(logging.Formatter):
         return out
 
 def logger_config() -> None:
-    bot_root = Path(__file__).resolve().parents[2]
-    log_dir = bot_root / "logs"
+    log_dir = PROJECT_ROOT / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / "bot.log"
 

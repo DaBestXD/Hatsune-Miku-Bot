@@ -1,8 +1,8 @@
 import aiosqlite
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
+from hatsune_miku_bot.botextras.config import PROJECT_ROOT
 
-DB_PATH = Path(__file__).resolve().parents[2] / "data" / "status.db"
+DB_PATH = PROJECT_ROOT / "data" / "status.db"
 
 
 async def get_status() -> dict[str, str]:

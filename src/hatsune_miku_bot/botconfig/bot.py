@@ -5,9 +5,9 @@ from discord import Interaction
 from discord.app_commands import CheckFailure
 from discord.app_commands.errors import AppCommandError
 from discord.ext import commands
-from botextras.constants import GUILD_ID, USER_ID, DISCORD_TOKEN
-from botextras.bot_funcs_ext import reply, text_only_embed
-from db_stuff.db_logic import insert_event, utc_now_dt
+from hatsune_miku_bot.botextras.constants import GUILD_ID, USER_ID, DISCORD_TOKEN
+from hatsune_miku_bot.botextras.bot_funcs_ext import reply, text_only_embed
+from hatsune_miku_bot.db_stuff.db_logic import insert_event, utc_now_dt
 from datetime import datetime, timezone
 
 
@@ -53,10 +53,10 @@ class Bot(commands.Bot):
             )
 
     async def setup_hook(self) -> None:
-        await self.load_extension("cogs.musicplayer")
+        await self.load_extension("hatsune_miku_bot.cogs.musicplayer")
         if self.debugger_on and USER_ID and GUILD_ID:
-            await self.load_extension("cogs.debugger")
-        await self.load_extension("cogs.utilcommands")
+            await self.load_extension("hatsune_miku_bot.cogs.debugger")
+        await self.load_extension("hatsune_miku_bot.cogs.utilcommands")
         for ext in self.extensions:
             self.logger.info("Loaded %s", ext)
         self.tree.on_error = self.on_app_command_error
@@ -124,5 +124,6 @@ class Bot(commands.Bot):
 
 
 def botsetup(debugger_on: bool = False) -> tuple[Bot, str]:
-    assert DISCORD_TOKEN, "Discord token cannot be none"
+    if not DISCORD_TOKEN:
+        raise ValueError("Discord token cannot be none")
     return (Bot(owner_id=USER_ID, debugger_on=debugger_on), DISCORD_TOKEN)

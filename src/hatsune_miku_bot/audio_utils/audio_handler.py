@@ -7,15 +7,32 @@ import warnings
 import asyncio
 import time
 from typing import cast
-from audio_utils.audio_class import Song, Playlist
+from hatsune_miku_bot.audio_utils.audio_class import Song, Playlist
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 from urllib.parse import quote_plus
-from botextras.constants import (CLIENT_ID, CLIENT_SECRET, EXTRACT_VALS,
-    EXTRACT_VALS_PLAYLIST,EXTRACT_VALS_SEARCH, SP_ALBUM_META_PARAMS,
-    SP_ALBUM_PARAMS, SP_PLAYLIST_META_PARAMS, SP_PLAYLIST_PARAMS, SPOTIFY_REQUEST_TIMEOUT_S, SPOTIFY_RETRY_DELAYS_S, SPOTIFY_RETRY_STATUSES, YDL_OPTS,
-    YOUTUBE, SOUNDCLOUD, SPOTIFY, SP_ALBUM_LINK, SP_TRACK_LINK,
-    SP_PLAYLIST_LINK,AUDIO_OPTS)
+from hatsune_miku_bot.botextras.constants import (
+    CLIENT_ID,
+    CLIENT_SECRET,
+    EXTRACT_VALS,
+    EXTRACT_VALS_PLAYLIST,
+    EXTRACT_VALS_SEARCH,
+    SP_ALBUM_META_PARAMS,
+    SP_ALBUM_PARAMS,
+    SP_PLAYLIST_META_PARAMS,
+    SP_PLAYLIST_PARAMS,
+    SPOTIFY_REQUEST_TIMEOUT_S,
+    SPOTIFY_RETRY_DELAYS_S,
+    SPOTIFY_RETRY_STATUSES,
+    YDL_OPTS,
+    YOUTUBE,
+    SOUNDCLOUD,
+    SPOTIFY,
+    SP_ALBUM_LINK,
+    SP_TRACK_LINK,
+    SP_PLAYLIST_LINK,
+    AUDIO_OPTS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +45,21 @@ def spotify_request(method: str, url: str, **kwargs) -> requests.Response | None
             response = requests.request(method, url, **kwargs)
         except requests.RequestException as e:
             if attempt == max_attempts:
-                logger.error( "Spotify %s request failed for %s after %d attempts: %s",
-                    method.upper(), url, attempt, e,
+                logger.error(
+                    "Spotify %s request failed for %s after %d attempts: %s",
+                    method.upper(),
+                    url,
+                    attempt,
+                    e,
                 )
                 return None
             logger.warning(
                 "Spotify %s request error for %s (attempt %d/%d): %s",
-                method.upper(), url, attempt, max_attempts, e,
+                method.upper(),
+                url,
+                attempt,
+                max_attempts,
+                e,
             )
         else:
             if response.status_code not in SPOTIFY_RETRY_STATUSES:
@@ -43,22 +68,34 @@ def spotify_request(method: str, url: str, **kwargs) -> requests.Response | None
                 return response
             logger.warning(
                 "Spotify %s request to %s returned [%d] (attempt %d/%d)",
-                method.upper(), url, response.status_code, attempt, max_attempts,
+                method.upper(),
+                url,
+                response.status_code,
+                attempt,
+                max_attempts,
             )
         time.sleep(SPOTIFY_RETRY_DELAYS_S[attempt - 1])
     return None
 
-def yt_json_parser(entries: list[dict[str,str|None]], extract_items: tuple[str,...])->list[Song]|None:
-    return_val:list[Song] = []
+
+def yt_json_parser(
+    entries: list[dict[str, str | None]], extract_items: tuple[str, ...]
+) -> list[Song] | None:
+    return_val: list[Song] = []
     for e in entries:
-        song_dict:dict[str,str] = {}
+        song_dict: dict[str, str] = {}
         if not isinstance(e, dict):
             continue
         for key in extract_items:
             # This terribleness is to extract thumbnails, as thumbnails are stored as a list of dicts
             # with the key of url holding the thumbnail link and -1 is to get the largest thumbnail
-            temp = (tb.get("url") if isinstance(val:=e.get(key), list)
-            and val and isinstance(tb:=val[-1], dict) else str(val))
+            temp = (
+                tb.get("url")
+                if isinstance(val := e.get(key), list)
+                and val
+                and isinstance(tb := val[-1], dict)
+                else str(val)
+            )
             if not temp or temp == "None":
                 continue
             song_dict[key] = temp
@@ -70,6 +107,7 @@ def yt_json_parser(entries: list[dict[str,str|None]], extract_items: tuple[str,.
         return return_val
     else:
         return None
+
 
 def get_token() -> None | str:
     # Silent fail if no provided spotify client id or secret
@@ -96,18 +134,21 @@ def get_token() -> None | str:
     logger.error("[%s]: %d", token_res.reason, token_res.status_code)
     return None
 
+
 def search_Query(query: str) -> Song | None:
     try:
         with YoutubeDL(params=YDL_OPTS) as ydl:
-            result = ydl.extract_info(f"ytsearch2:{query}", download=False, process=False)
+            result = ydl.extract_info(
+                f"ytsearch2:{query}", download=False, process=False
+            )
             entries = result.get("entries")
             if entries:
-                songs:list[Song] = []
+                songs: list[Song] = []
                 for n in entries:
-                    song_url:str = n.get("url") or "Unknown url"
+                    song_url: str = n.get("url") or "Unknown url"
                     if "channel/" in song_url:
                         continue
-                    song = yt_json_parser([n],EXTRACT_VALS_SEARCH)
+                    song = yt_json_parser([n], EXTRACT_VALS_SEARCH)
                     if song:
                         song = song[0]
                         songs.append(song)
@@ -116,41 +157,48 @@ def search_Query(query: str) -> Song | None:
                 logger.error("Search_query failed to get song info(Song list empty)")
                 return None
             else:
-                logger.error("Search_query failed to return a search result for %s(No entries)",query)
+                logger.error(
+                    "Search_query failed to return a search result for %s(No entries)",
+                    query,
+                )
                 return None
     except DownloadError as e:
         logger.error("Search query download error: %s", e)
         return None
 
-def get_Youtube_Info(url: str) -> Playlist|Song|None:
+
+def get_Youtube_Info(url: str) -> Playlist | Song | None:
     """
     This function is strictly for urls(Playlist or single tracks)
     """
     try:
-        cleaned_url = re.match(r"^([^&+]*)",url)
+        cleaned_url = re.match(r"^([^&+]*)", url)
         if cleaned_url:
             cleaned_url = cleaned_url.group(1)
         else:
             logger.error("Regex error for %s", url)
             return None
         with YoutubeDL(params=YDL_OPTS) as ydl:
-            result = ydl.extract_info(cleaned_url, download=False,process=False)
+            result = ydl.extract_info(cleaned_url, download=False, process=False)
             entries = result.get("entries")
-            result = cast(dict[str,str|None],result)
+            result = cast(dict[str, str | None], result)
             if entries:
-                songs:list[Song]|None = (yt_json_parser(entries,EXTRACT_VALS_SEARCH))
+                songs: list[Song] | None = yt_json_parser(entries, EXTRACT_VALS_SEARCH)
                 if songs:
                     # This extracts playlist thumbnail image I would use the item_extractor function
                     # but I hardcoded it to return list[Song] and I don't want to rewrite the function
                     # Ideally it should just be "playlist_vals = item_extractor(result, EXTRACT_VALS_PLAYLIST)"
-                    playlist_vals:list[str] = [lv.get("url") or "None" if
-                        isinstance(tmb := result.get(key) or "Unknown",list)
-                        and isinstance(lv :=tmb[-1],dict) else tmb for key in
-                        EXTRACT_VALS_PLAYLIST]
-                    return Playlist(songs,*playlist_vals)
+                    playlist_vals: list[str] = [
+                        lv.get("url") or "None"
+                        if isinstance(tmb := result.get(key) or "Unknown", list)
+                        and isinstance(lv := tmb[-1], dict)
+                        else tmb
+                        for key in EXTRACT_VALS_PLAYLIST
+                    ]
+                    return Playlist(songs, *playlist_vals)
                 else:
                     return None
-            single_song = yt_json_parser([result],EXTRACT_VALS)
+            single_song = yt_json_parser([result], EXTRACT_VALS)
             if single_song:
                 return single_song[0]
             return None
@@ -158,7 +206,7 @@ def get_Youtube_Info(url: str) -> Playlist|Song|None:
         return None
 
 
-def get_Soundcloud_Info(url: str) -> Song| None:
+def get_Soundcloud_Info(url: str) -> Song | None:
     if re.match(r"(.*sets+.*)(?:\?)", url):
         logger.info("Soundcloud playlist was entered")
         return None
@@ -167,7 +215,7 @@ def get_Soundcloud_Info(url: str) -> Song| None:
             result = ydl.extract_info(url, download=False)
             restricted = True
             formats = result.get("formats")
-            result = cast(dict[str,str|None],result)
+            result = cast(dict[str, str | None], result)
             if formats:
                 for key in formats:
                     if "http_mp3" in key["format_id"]:
@@ -175,13 +223,15 @@ def get_Soundcloud_Info(url: str) -> Song| None:
                 if restricted:
                     logger.info("Unable to retrieve soundcloud http_mp3")
                     return None
-                song = yt_json_parser([result],EXTRACT_VALS)
+                song = yt_json_parser([result], EXTRACT_VALS)
                 if song:
                     return song[0]
                 else:
-                    logger.error("Song information empty: %s",url)
+                    logger.error("Song information empty: %s", url)
                     return None
-            logger.error("Regex failed for soundcloud info, Formats: %s Title: %s", formats, url)
+            logger.error(
+                "Regex failed for soundcloud info, Formats: %s Title: %s", formats, url
+            )
             return None
     except DownloadError as e:
         logger.error("Soundcloud download error: %s", e)
@@ -190,7 +240,13 @@ def get_Soundcloud_Info(url: str) -> Song| None:
 
 # Messy but it works
 # TODO set up extractor similar to item_extractor
-def sp_multi_helper_func(api_link: str, headers: dict[str,str], params: dict[str,str] | None, path_type: str, alb_thumb_url: str = "None")-> list[Song] | None:
+def sp_multi_helper_func(
+    api_link: str,
+    headers: dict[str, str],
+    params: dict[str, str] | None,
+    path_type: str,
+    alb_thumb_url: str = "None",
+) -> list[Song] | None:
     songs: list[Song] = []
     while api_link:
         r = spotify_request("get", api_link, headers=headers, params=params)
@@ -202,7 +258,9 @@ def sp_multi_helper_func(api_link: str, headers: dict[str,str], params: dict[str
         song_json = r.json()
         items = song_json.get("items")
         if not items:
-            logger.error("Sp_multi_helpfunc Error trying to get items for: %s", api_link)
+            logger.error(
+                "Sp_multi_helpfunc Error trying to get items for: %s", api_link
+            )
             return None
         if path_type == "album":
             for track in items:
@@ -212,37 +270,46 @@ def sp_multi_helper_func(api_link: str, headers: dict[str,str], params: dict[str
                     artist = track["artists"][0]["name"]
                     spotify_url = track["external_urls"]["spotify"]
                     title = track_name + " - " + artist
-                    songs.append(Song(title,spotify_url,alb_thumb_url,duration,"0"))
+                    songs.append(Song(title, spotify_url, alb_thumb_url, duration, "0"))
                 except (IndexError, KeyError, AttributeError, TypeError):
                     continue
         if path_type == "playlist":
             for song in items:
-                if track:=song.get("track"):
+                if track := song.get("track"):
                     try:
                         track_name = track["name"]
                         spotify_url = track["external_urls"]["spotify"]
-                        artist= track["artists"][0]["name"]
+                        artist = track["artists"][0]["name"]
                         thumbnail_url = track["album"]["images"][0]["url"]
                         duration = track["duration_ms"] // 1000
                         title = track_name + " - " + artist
-                        songs.append(Song(title,spotify_url,thumbnail_url,duration,"0"))
+                        songs.append(
+                            Song(title, spotify_url, thumbnail_url, duration, "0")
+                        )
                     except (IndexError, KeyError, AttributeError, TypeError):
                         continue
         api_link = song_json.get("next")
         params = None
     return songs
+
+
 # TODO oh my god... Fix this
-def get_spotify_info(path_type: str, id: str) -> Playlist|Song|None:
+def get_spotify_info(path_type: str, id: str) -> Playlist | Song | None:
     token = get_token()
     if not token:
         return None
-    headers = {"Authorization" : f"Bearer {token}"}
-    songs:list[Song]|None = []
+    headers = {"Authorization": f"Bearer {token}"}
+    songs: list[Song] | None = []
     if "/album/" in path_type:
         api_link = SP_ALBUM_LINK + id + "/tracks"
         album_name: str = "Unknown"
         album_thumbnail: str = "None"
-        r = spotify_request("get", SP_ALBUM_LINK + id, headers=headers, params=SP_ALBUM_META_PARAMS,)
+        r = spotify_request(
+            "get",
+            SP_ALBUM_LINK + id,
+            headers=headers,
+            params=SP_ALBUM_META_PARAMS,
+        )
         if not r:
             return None
         if r.status_code == 200:
@@ -252,18 +319,28 @@ def get_spotify_info(path_type: str, id: str) -> Playlist|Song|None:
                 album_thumbnail = album_json["images"][0]["url"]
             except AttributeError:
                 return None
-            songs = sp_multi_helper_func(api_link,headers,params=SP_ALBUM_PARAMS,path_type="album",alb_thumb_url=album_thumbnail)
+            songs = sp_multi_helper_func(
+                api_link,
+                headers,
+                params=SP_ALBUM_PARAMS,
+                path_type="album",
+                alb_thumb_url=album_thumbnail,
+            )
         if not songs:
             return None
-        return Playlist(songs,album_name,path_type,album_thumbnail)
+        return Playlist(songs, album_name, path_type, album_thumbnail)
     elif "/playlist/" in path_type:
         api_link = SP_PLAYLIST_LINK + id + "/tracks"
-        playlist_name = "Unknown"
         params = SP_PLAYLIST_PARAMS
-        songs = sp_multi_helper_func(api_link,headers,params,path_type="playlist")
+        songs = sp_multi_helper_func(api_link, headers, params, path_type="playlist")
         if not songs:
             return None
-        r = spotify_request("get", SP_PLAYLIST_LINK + id, headers=headers, params=SP_PLAYLIST_META_PARAMS,)
+        r = spotify_request(
+            "get",
+            SP_PLAYLIST_LINK + id,
+            headers=headers,
+            params=SP_PLAYLIST_META_PARAMS,
+        )
         if not r:
             return None
         if r.status_code == 200:
@@ -273,7 +350,7 @@ def get_spotify_info(path_type: str, id: str) -> Playlist|Song|None:
             except (KeyError, IndexError):
                 playlist_thumbnail = "None"
             playlist_name = playlist_json.get("name") or "Unknown Name"
-            return Playlist(songs,playlist_name,path_type,playlist_thumbnail)
+            return Playlist(songs, playlist_name, path_type, playlist_thumbnail)
     elif "/track/" in path_type:
         api_link = SP_TRACK_LINK + id
         params = {"market": "US"}
@@ -290,12 +367,13 @@ def get_spotify_info(path_type: str, id: str) -> Playlist|Song|None:
             song_name = song_json["name"]
             song_artist = song_json["artists"][0]["name"]
             song_title: str = song_name + " - " + song_artist
-            return Song(song_title,path_type,thumbnail,duration,"0")
+            return Song(song_title, path_type, thumbnail, duration, "0")
         except (AttributeError, TypeError, IndexError):
             return None
     return None
 
-def _get_Song_Info(url: str) -> Playlist|Song|None:
+
+def _get_Song_Info(url: str) -> Playlist | Song | None:
     # Filters into two parts domain and other
     grouped_url = re.match(r"(?:https://)([a-z.]+/)(.*)", url)
     if grouped_url is None:
@@ -313,8 +391,10 @@ def _get_Song_Info(url: str) -> Playlist|Song|None:
         return get_Soundcloud_Info(url)
     return None
 
+
 async def get_Song_Info(url: str):
     return await asyncio.to_thread(_get_Song_Info, url)
+
 
 def _get_Audio_Source(query: Song) -> str | None:
     try:
@@ -323,22 +403,34 @@ def _get_Audio_Source(query: Song) -> str | None:
                 music_search_url = f"https://music.youtube.com/search?q={quote_plus(query.title)}#songs"
                 result = ydl.extract_info(music_search_url, download=False)
                 entries = result.get("entries")
-                songs:list[tuple[int,str|None]] = []
+                songs: list[tuple[int, str | None]] = []
                 if not entries:
-                    logger.info("Unable to find entries for %s, link: %s", query.title, query.webpage_url)
+                    logger.info(
+                        "Unable to find entries for %s, link: %s",
+                        query.title,
+                        query.webpage_url,
+                    )
                     return None
                 for n in entries:
                     url = n.get("url") or None
-                    view_count:int = n.get("view_count") or 0
+                    view_count: int = n.get("view_count") or 0
                     songs.append((view_count, url))
                 # Possibily change this to compare artist title to channel for better results
                 # then fall back on view count after no match
                 _, url = max(songs)
-                logger.info("Loaded audio for spotify link: %s, %s", query.title , query.webpage_url)
+                logger.info(
+                    "Loaded audio for spotify link: %s, %s",
+                    query.title,
+                    query.webpage_url,
+                )
                 return url
             else:
-                result = ydl.extract_info(url=query.webpage_url,download=False)
-                logger.info("Loaded audio for non-spotify link: %s, %s", query.title,query.webpage_url.replace("https://", ""))
+                result = ydl.extract_info(url=query.webpage_url, download=False)
+                logger.info(
+                    "Loaded audio for non-spotify link: %s, %s",
+                    query.title,
+                    query.webpage_url.replace("https://", ""),
+                )
                 return result.get("url")
     except DownloadError as e:
         logger.error("Audio source download error: %s", e)
@@ -346,6 +438,7 @@ def _get_Audio_Source(query: Song) -> str | None:
     except Exception as e:
         logger.critical("Audio failed in unexpected way: %s", e)
         return None
+
 
 async def get_Audio_Source(query: Song):
     return await asyncio.to_thread(_get_Audio_Source, query)

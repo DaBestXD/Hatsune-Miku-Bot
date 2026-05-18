@@ -1,3 +1,4 @@
+from typing import Any
 import asyncio
 import io
 import logging
@@ -6,10 +7,10 @@ import random
 from collections.abc import Awaitable, Callable
 from discord import Interaction
 from discord.ext import commands
-from audio_utils.audio_handler import get_Audio_Source
-from audio_utils.bot_audio_functions import build_audio, mod_song
-from botextras.bot_funcs_ext import reply, text_only_embed
-from botextras.bot_events import (
+from hatsune_miku_bot.audio_utils.audio_handler import get_Audio_Source
+from hatsune_miku_bot.audio_utils.bot_audio_functions import build_audio, mod_song
+from hatsune_miku_bot.botextras.bot_funcs_ext import reply, text_only_embed
+from hatsune_miku_bot.botextras.bot_events import (
     FinishedPlayback,
     ClearQueue,
     LoopSong,
@@ -26,9 +27,9 @@ from botextras.bot_events import (
     UpdateVoiceStatus,
     VolumeControl,
 )
-from botextras.constants import CACHE_TIMER_S
+from hatsune_miku_bot.botextras.constants import CACHE_TIMER_S
 
-EventHandler = Callable[[Event], Awaitable[None]]
+EventHandler = Callable[[Any], Awaitable[None]]
 
 
 class GuildStateController:
@@ -169,9 +170,7 @@ class GuildStateController:
             )
         return None
 
-    async def _queue_helper(self, event: Event) -> None:
-        if not isinstance(event, QueueSongs):
-            return None
+    async def _queue_helper(self, event: QueueSongs) -> None:
         self.state.songs.extend(event.songs)
         self.state.vc = event.vc
         self.state.active_song = self.state.songs[0]
@@ -185,17 +184,13 @@ class GuildStateController:
                 embed=event.songs[0].return_embed(next_song, queued=True),
             )
 
-    async def _handle_queue_songs(self, event: Event) -> None:
-        if not isinstance(event, QueueSongs):
-            return None
+    async def _handle_queue_songs(self, event: QueueSongs) -> None:
         await self._queue_helper(event)
         if not event.vc.is_playing():
             await self._play()
         return None
 
-    async def _update_voice_status(self, event: Event) -> None:
-        if not isinstance(event, UpdateVoiceStatus):
-            return None
+    async def _update_voice_status(self, event: UpdateVoiceStatus) -> None:
         self.state.vc = event.vc
         return None
 
@@ -297,7 +292,7 @@ class GuildStateController:
             if self.state.active_song:
                 try:
                     self.state.song_cache.pop(self.state.active_song.webpage_url)
-                except:
+                except KeyError:
                     ...
         if self.state.songs:
             if not self.state.song_loop:
@@ -306,9 +301,7 @@ class GuildStateController:
         await self._play()
         return None
 
-    async def _skip(self, event: Event) -> None:
-        if not isinstance(event, Skip):
-            return None
+    async def _skip(self, event: Skip) -> None:
         next_song = self.state.songs[1] if len(self.state.songs) >= 2 else None
         if self.state.active_song:
             await reply(
@@ -321,9 +314,7 @@ class GuildStateController:
         await self.bad_cache()
         return None
 
-    async def _shuffle(self, event: Event) -> None:
-        if not isinstance(event, Shuffle):
-            return None
+    async def _shuffle(self, event: Shuffle) -> None:
         await reply(event.interaction, embed=text_only_embed("🔀Queue shuffled🔀"))
         if self.state.songs and len(self.state.songs) > 2:
             head = [self.state.songs[0]]
@@ -352,9 +343,7 @@ class GuildStateController:
             await reply(interaction, embed=text_only_embed(text))
         return None
 
-    async def _nightcore(self, event: Event) -> None:
-        if not isinstance(event, Nightcore):
-            return None
+    async def _nightcore(self, event: Nightcore) -> None:
         resume_position_s = self._current_song_position()
         self.state.song_pitch = (
             await mod_song("pitch", 1.25)
@@ -369,9 +358,7 @@ class GuildStateController:
             event.done.set_result(None)
         return None
 
-    async def _setbass(self, event: Event) -> None:
-        if not isinstance(event, SetBass):
-            return None
+    async def _setbass(self, event: SetBass) -> None:
         self.state.song_bass = await mod_song(
             "bass", effect_strength=event.effect_strength
         )
@@ -380,9 +367,7 @@ class GuildStateController:
         await self._song_mod_helper(event.interaction, text)
         return None
 
-    async def _setspeed(self, event: Event) -> None:
-        if not isinstance(event, SetSpeed):
-            return None
+    async def _setspeed(self, event: SetSpeed) -> None:
         resume_position_s = self._current_song_position()
         self.state.song_speed = await mod_song(
             "speed", effect_strength=event.effect_strength
@@ -392,9 +377,7 @@ class GuildStateController:
         await self._song_mod_helper(event.interaction, text, resume_position_s)
         return None
 
-    async def _stop_playback(self, event: Event) -> None:
-        if not isinstance(event, StopPlayblack):
-            return None
+    async def _stop_playback(self, event: StopPlayblack) -> None:
         self.state.active_song = None
         self.state.position_offset_s = 0.0
         self.state.seek_time = None

@@ -7,8 +7,8 @@ from discord import (
     VoiceProtocol,
     User,
 )
-from botextras.constants import FFMPEG_OPTS
-from botextras.bot_funcs_ext import reply, text_only_embed
+from hatsune_miku_bot.botextras.constants import FFMPEG_OPTS
+from hatsune_miku_bot.botextras.bot_funcs_ext import reply, text_only_embed
 
 
 def build_audio(

@@ -1,12 +1,12 @@
 import aiosqlite
 import asyncio
-from botextras.constants import DB_PATH
+from hatsune_miku_bot.botextras.constants import DB_PATH
 from typing import TYPE_CHECKING, Literal
-from db_stuff.db_schema import CREATE_EVENTS, CREATE_SNAPSHOTS
+from hatsune_miku_bot.db_stuff.db_schema import CREATE_EVENTS, CREATE_SNAPSHOTS
 from datetime import datetime, timezone
 
 if TYPE_CHECKING:
-    from botconfig.bot import Bot
+    from hatsune_miku_bot.botconfig.bot import Bot
 
 
 async def db_init():
