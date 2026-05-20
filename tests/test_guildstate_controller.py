@@ -50,6 +50,40 @@ class GuildStateControllerTests(unittest.IsolatedAsyncioTestCase):
         reply_mock.assert_awaited_once()
         play_mock.assert_awaited_once_with()
 
+    async def test_add_event_dispatches_queue_songs_through_main_loop(self) -> None:
+        bot = SimpleNamespace(loop=asyncio.get_running_loop())
+        controller = GuildStateController(bot, 42)
+        song = make_song("Song One", "https://song.test/1")
+        interaction = object()
+        text_channel = SimpleNamespace(send=AsyncMock())
+        vc = SimpleNamespace(is_playing=Mock(return_value=False))
+
+        with (
+            patch(
+                "hatsune_miku_bot.audio_utils.guildstate_controller.reply",
+                new=AsyncMock(),
+            ) as reply_mock,
+            patch.object(controller, "_play", new=AsyncMock()) as play_mock,
+        ):
+            await controller.run()
+            try:
+                await controller.add_event(
+                    QueueSongs(
+                        songs=[song],
+                        vc=vc,
+                        text_channel=text_channel,
+                        interaction=interaction,
+                    )
+                )
+                await asyncio.wait_for(controller.queue.join(), timeout=1)
+            finally:
+                await controller.stop()
+
+        self.assertEqual(controller.state.songs, [song])
+        self.assertIs(controller.state.active_song, song)
+        reply_mock.assert_awaited_once()
+        play_mock.assert_awaited_once_with()
+
     async def test_play_skips_unplayable_song_and_advances_to_next_song(self) -> None:
         bot = SimpleNamespace(loop=asyncio.get_running_loop())
         controller = GuildStateController(bot, 42)
@@ -86,6 +120,34 @@ class GuildStateControllerTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(callable(vc.play.call_args.kwargs["after"]))
         to_thread_mock.assert_awaited_once()
         bad_cache_mock.assert_awaited_once_with()
+
+    async def test_play_drains_large_unplayable_queue_without_recursion_error(
+        self,
+    ) -> None:
+        bot = SimpleNamespace(loop=asyncio.get_running_loop())
+        controller = GuildStateController(bot, 42)
+        songs = [
+            make_song(f"Broken {idx}", f"https://song.test/broken-{idx}")
+            for idx in range(1100)
+        ]
+        text_channel = SimpleNamespace(send=AsyncMock())
+        vc = SimpleNamespace(play=Mock(), is_playing=Mock(return_value=False))
+        controller.state.songs = songs.copy()
+        controller.state.active_song = controller.state.songs[0]
+        controller.state.vc = vc
+        controller.state.text_channel = text_channel
+
+        with patch(
+            "hatsune_miku_bot.audio_utils.guildstate_controller.get_Audio_Source",
+            new=AsyncMock(return_value=None),
+        ) as get_audio_mock:
+            await controller._play()
+
+        self.assertEqual(controller.state.songs, [])
+        self.assertIsNone(controller.state.active_song)
+        self.assertEqual(get_audio_mock.await_count, len(songs))
+        vc.play.assert_not_called()
+        self.assertEqual(text_channel.send.await_count, len(songs) + 1)
 
     async def test_finished_playback_removes_current_song_and_recovers_from_403(self) -> None:
         bot = SimpleNamespace(loop=asyncio.get_running_loop())

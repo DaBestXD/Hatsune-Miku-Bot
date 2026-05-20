@@ -214,8 +214,8 @@ class GuildStateController:
         return self.state.position_offset_s + (elapsed_s * self._playback_rate())
 
     async def _play(self) -> None:
-        song = self.state.active_song
-        if song and self.state.vc:
+        while self.state.active_song and self.state.vc:
+            song = self.state.active_song
             source = self.state.song_cache.get(song.webpage_url)
             if not source:
                 source = await get_Audio_Source(song)
@@ -228,7 +228,7 @@ class GuildStateController:
                 self.state.active_song = (
                     self.state.songs[0] if self.state.songs else None
                 )
-                return await self._play()
+                continue
             stderr_buff = io.BytesIO()
             seek_time = self.state.seek_time if self.state.seek_time else 0
             # prob should change song_mods to be a class that builds one string
@@ -265,11 +265,9 @@ class GuildStateController:
                 self.state.mod_song = False
             self.state.song_cache[song.webpage_url] = source
             await self.bad_cache()
-        else:
-            if self.state.text_channel:
-                await self.state.text_channel.send(
-                    embed=text_only_embed("Queue empty🐱")
-                )
+            return None
+        if self.state.text_channel:
+            await self.state.text_channel.send(embed=text_only_embed("Queue empty🐱"))
         return None
 
     def _callback_queue(

@@ -40,6 +40,18 @@ AUDIO_OPTS = cast(
         "quiet": True,
     },
 )
+SPOTIFY_SEARCH_RESULT_LIMIT = 3
+SPOTIFY_SEARCH_OPTS = cast(
+    Any,
+    {
+        "default_search": f"ytsearch{SPOTIFY_SEARCH_RESULT_LIMIT}",
+        "js_runtimes": {"node": {}},
+        "extract_flat": "in_playlist",
+        "remote_components": ["ejs:github"],
+        "noplaylist": True,
+        "quiet": True,
+    },
+)
 FFMPEG_OPTS = cast(
     Any,
     {

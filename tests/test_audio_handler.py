@@ -73,30 +73,140 @@ class SpotifyInfoTests(unittest.TestCase):
 
 
 class AudioSourceTests(unittest.TestCase):
-    def test_get_audio_source_uses_youtube_music_results_for_spotify_tracks(self) -> None:
-        spotify_song = Song(
-            "World is Mine",
+    def _spotify_song(self) -> Song:
+        return Song(
+            "World is Mine - Hatsune Miku",
             "https://open.spotify.com/track/test-id",
             "https://thumb.test/image.jpg",
             "210",
             "0",
         )
-        fake_ydl = MagicMock()
-        fake_ydl.extract_info.return_value = {
+
+    def _ydl_context(self, ydl_mock: MagicMock) -> MagicMock:
+        context = MagicMock()
+        context.__enter__.return_value = ydl_mock
+        context.__exit__.return_value = None
+        return context
+
+    def test_get_audio_source_fuzzy_matches_spotify_tracks_before_resolving(
+        self,
+    ) -> None:
+        spotify_song = self._spotify_song()
+        fake_search_ydl = MagicMock()
+        fake_search_ydl.extract_info.return_value = {
             "entries": [
-                {"view_count": 12, "url": "https://audio.test/low"},
-                {"view_count": 100, "url": "https://audio.test/high"},
+                {
+                    "title": "Unrelated Song",
+                    "channel": "Wrong Artist",
+                    "duration": 210,
+                    "view_count": 10_000,
+                    "url": "https://youtube.test/wrong",
+                },
+                {
+                    "title": "Hatsune Miku - World is Mine",
+                    "channel": "Hatsune Miku",
+                    "duration": 211,
+                    "view_count": 12,
+                    "url": "https://youtube.test/correct",
+                },
             ]
         }
+        fake_resolve_ydl = MagicMock()
+        fake_resolve_ydl.extract_info.return_value = {
+            "url": "https://audio.test/resolved"
+        }
         fake_ydl_cls = MagicMock()
-        fake_ydl_cls.return_value.__enter__.return_value = fake_ydl
-        fake_ydl_cls.return_value.__exit__.return_value = None
+        fake_ydl_cls.side_effect = [
+            self._ydl_context(fake_search_ydl),
+            self._ydl_context(fake_resolve_ydl),
+        ]
 
         with patch.object(audio_handler, "YoutubeDL", fake_ydl_cls):
             result = audio_handler._get_Audio_Source(spotify_song)
 
-        self.assertEqual(result, "https://audio.test/high")
+        self.assertEqual(result, "https://audio.test/resolved")
+        fake_ydl_cls.assert_has_calls(
+            [call(audio_handler.SPOTIFY_SEARCH_OPTS), call(audio_handler.AUDIO_OPTS)]
+        )
+        fake_search_ydl.extract_info.assert_called_once_with(
+            "ytsearch3:World is Mine - Hatsune Miku",
+            download=False,
+            process=False,
+        )
+        fake_resolve_ydl.extract_info.assert_called_once_with(
+            url="https://youtube.test/correct",
+            download=False,
+        )
+
+    def test_get_audio_source_uses_first_spotify_result_on_score_tie(self) -> None:
+        spotify_song = self._spotify_song()
+        fake_search_ydl = MagicMock()
+        fake_search_ydl.extract_info.return_value = {
+            "entries": [
+                {
+                    "title": "World is Mine first",
+                    "channel": "Hatsune Miku",
+                    "url": "https://youtube.test/first",
+                },
+                {
+                    "title": "World is Mine second",
+                    "channel": "Hatsune Miku",
+                    "url": "https://youtube.test/second",
+                },
+            ]
+        }
+        fake_resolve_ydl = MagicMock()
+        fake_resolve_ydl.extract_info.return_value = {"url": "https://audio.test/first"}
+        fake_ydl_cls = MagicMock()
+        fake_ydl_cls.side_effect = [
+            self._ydl_context(fake_search_ydl),
+            self._ydl_context(fake_resolve_ydl),
+        ]
+
+        with patch.object(audio_handler, "YoutubeDL", fake_ydl_cls):
+            result = audio_handler._get_Audio_Source(spotify_song)
+
+        self.assertEqual(result, "https://audio.test/first")
+        fake_resolve_ydl.extract_info.assert_called_once_with(
+            url="https://youtube.test/first",
+            download=False,
+        )
+
+    def test_get_audio_source_returns_none_without_spotify_candidates(self) -> None:
+        spotify_song = self._spotify_song()
+        fake_search_ydl = MagicMock()
+        fake_search_ydl.extract_info.return_value = {
+            "entries": [
+                {"title": "Missing URL", "channel": "Hatsune Miku"},
+                "not a dict",
+            ]
+        }
+        fake_ydl_cls = MagicMock(return_value=self._ydl_context(fake_search_ydl))
+
+        with patch.object(audio_handler, "YoutubeDL", fake_ydl_cls):
+            result = audio_handler._get_Audio_Source(spotify_song)
+
+        self.assertIsNone(result)
+        fake_ydl_cls.assert_called_once_with(audio_handler.SPOTIFY_SEARCH_OPTS)
+
+    def test_get_audio_source_keeps_non_spotify_resolution_path(self) -> None:
+        youtube_song = Song(
+            "World is Mine",
+            "https://youtube.test/watch?v=test-id",
+            "https://thumb.test/image.jpg",
+            "210",
+            "0",
+        )
+        fake_ydl = MagicMock()
+        fake_ydl.extract_info.return_value = {"url": "https://audio.test/youtube"}
+        fake_ydl_cls = MagicMock(return_value=self._ydl_context(fake_ydl))
+
+        with patch.object(audio_handler, "YoutubeDL", fake_ydl_cls):
+            result = audio_handler._get_Audio_Source(youtube_song)
+
+        self.assertEqual(result, "https://audio.test/youtube")
+        fake_ydl_cls.assert_called_once_with(audio_handler.AUDIO_OPTS)
         fake_ydl.extract_info.assert_called_once_with(
-            "https://music.youtube.com/search?q=World+is+Mine#songs",
+            url="https://youtube.test/watch?v=test-id",
             download=False,
         )
