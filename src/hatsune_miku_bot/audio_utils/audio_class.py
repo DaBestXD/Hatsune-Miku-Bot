@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Self, Any
 import time
 import discord
 
@@ -30,6 +31,22 @@ class Song:
             self.formatted_duration = "0"
         self.view_count: str = view_count
         self.source = ""
+
+    @classmethod
+    def from_json(cls, json_input: dict[str, Any]) -> Self:
+        # TODO: this whole string situation needs to change
+        thumbnails = json_input.get("thumbnails")
+        thumbnail_url = ""
+        # if not used here to exclude both empty lists and none values
+        if not thumbnails and isinstance(thumbnails, list):
+            thumbnail_url = thumbnails[-1]["url"]
+        return cls(
+            title=str(json_input.get("title")),
+            webpage_url=str(json_input.get("url")),
+            thumbnail_url=thumbnail_url,
+            duration=str(json_input.get("duration")),
+            view_count=str(json_input.get("view_count")),
+        )
 
     def return_embed(
         self,
@@ -115,6 +132,21 @@ class Playlist:
         self.total_duration: int = sum([s.duration for s in self.songs])
         self.formatted_duration = time.strftime(
             "%H:%M:%S", time.gmtime(self.total_duration)
+        )
+
+    @classmethod
+    def from_json(cls, result: dict[str, Any], entries: list[dict[str, Any]]) -> Self:
+        songs = [Song.from_json(e) for e in entries if e]
+        thumbnails = result.get("thumbnails")
+        thumbnail_url = ""
+        # if not used here to exclude both empty lists and none values
+        if not thumbnails and isinstance(thumbnails, list):
+            thumbnail_url = thumbnails[-1]["url"]
+        return cls(
+            songs,
+            str(result.get("title")),
+            str(result.get("original_url")),
+            thumbnail_url,
         )
 
     def return_embed(self) -> discord.Embed:

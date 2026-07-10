@@ -106,7 +106,7 @@ class Bot(commands.Bot):
         return None
 
     async def on_app_command_error(
-        self, interaction: Interaction, error: AppCommandError
+        self, interaction: Interaction, error: AppCommandError, /
     ) -> None:
         if isinstance(error, CheckFailure):
             await reply(
