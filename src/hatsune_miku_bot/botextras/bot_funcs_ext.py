@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import TypedDict, Unpack
 import discord
 from hatsune_miku_bot.botextras.constants import USER_ID
 from hatsune_miku_bot.botextras.config import ASSET_DIR
@@ -11,6 +12,12 @@ from discord import (
 )
 
 
+class _ReplyDict(TypedDict, total=False):
+    embed: discord.Embed
+    file: discord.File
+    ephemeral: bool
+
+
 def owner_command():
     async def predicate(interaction: Interaction) -> bool:
         return interaction.user.id == USER_ID
@@ -19,7 +26,7 @@ def owner_command():
 
 
 async def reply(
-    interaction: discord.Interaction, msg: str = "", **kwargs
+    interaction: discord.Interaction, msg: str = "", **kwargs: Unpack[_ReplyDict]
 ) -> WebhookMessage | InteractionCallbackResponse | None:
     try:
         if interaction.response.is_done():

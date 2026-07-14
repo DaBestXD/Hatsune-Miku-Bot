@@ -40,4 +40,6 @@ def logger_config() -> None:
     stream_h = logging.StreamHandler(sys.stdout)
     stream_h.setFormatter(console_fmt)
 
-    logging.basicConfig(level=logging.INFO, handlers=[file_h, stream_h])
+    logging.basicConfig(level=logging.DEBUG, handlers=[file_h, stream_h])
+    logging.getLogger("discord").setLevel(logging.INFO)
+    logging.getLogger("aiosqlite").setLevel(logging.WARNING)

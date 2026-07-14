@@ -1,3 +1,6 @@
+import random
+import time
+import os
 from typing import Any
 from yt_dlp.utils import DownloadError
 from hatsune_miku_bot.botextras.constants import YDL_OPTS
@@ -10,57 +13,74 @@ from hatsune_miku_bot.audio_utils.audio_class import Song, Playlist
 
 logger = logging.getLogger(__name__)
 
+
 # FOR CODEX NOTES:
 # - Goal of refactor to move away from requests and removal from dependacies
 # - and to try to reduce blocking calls as much as possible
+class Spotify:
+    def __init__(self, client: aiohttp.ClientSession):
+        self.client_id = os.getenv("SPOTIFY_CLIENT_ID")
+        self.client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
+        self.token: str | None = None
+        self.token_expiry: float = -1
+        self.client = client
 
-
-async def get_token(
-    session: aiohttp.ClientSession,
-    client_id: str | None,
-    client_secret: str | None,
-    retry_amount: int = 3,
-) -> str | None:
-    if not client_id or not client_secret:
-        return None
-    if retry_amount <= 0:
-        return None
-    auth_string = f"{client_id} : {client_secret}".encode("utf-8")
-    url = "https://accounts.spotify.com/api/token"
-    auth_base64 = str(base64.b64encode(auth_string))
-    headers = {
-        "Authorization": f"Basic {auth_base64}",
-        "Content-Type": "application/x-www-form-urlencoded",
-    }
-    data = {"grant_type": "client_credentials"}
-    try:
-        async with session.post(
-            url,
-            headers=headers,
-            data=data,
-        ) as res:
-            res.raise_for_status()
-            token_response = await res.json()
-            if not isinstance(token_response, dict):
-                # This should never happened
-                logger.error(
-                    "Token reponse was of type %s not dict", type(token_response)
-                )
-            return token_response.get("access_token")
-
-    except aiohttp.ClientResponseError as e:
-        if e.status >= 500:
-            logger.info("%s retrying...", e.status)
-            return await get_token(
-                session,
-                client_id,
-                client_secret,
-                retry_amount=retry_amount - 1,
+    async def get_token(self, max_attempts: int = 3) -> None:
+        if not self.client_id or not self.client_secret:
+            logger.warning("Attempted to play spotify song without credentials")
+            return None
+        if self.token and time.time() < self.token_expiry:
+            logger.debug(
+                "Token already cached, token expiry at %d", int(self.token_expiry)
             )
-        logger.error("%s: %s", e.status, e.message)
-        # One second sleep time should be fine for now
-        await asyncio.sleep(1)
-        return None
+            return None
+        if max_attempts <= 0:
+            return None
+        auth_string = f"{self.client_id}:{self.client_secret}".encode("utf-8")
+        url = "https://accounts.spotify.com/api/token"
+        auth_base64 = str(base64.b64encode(auth_string))
+        headers = {
+            "Authorization": f"Basic {auth_base64}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+        data = {"grant_type": "client_credentials"}
+        try:
+            async with self.client.post(
+                url,
+                headers=headers,
+                data=data,
+            ) as res:
+                res.raise_for_status()
+                token_response = await res.json()
+                if not isinstance(token_response, dict):
+                    # This should never happened
+                    logger.error(
+                        "Token reponse was of type %s not dict",
+                        type(token_response),
+                    )
+                # No get used here fail fast, means json structure has changed
+                # and needs to be updated
+                self.token = token_response["access_token"]
+                self.token_expiry = time.time() + (
+                    token_response["expires_in"] - random.randint(30, 120)
+                )
+                logger.debug("Spotify token has been set")
+
+        except aiohttp.ClientResponseError as e:
+            if e.status >= 500:
+                logger.info("%s retrying...", e.status)
+                return await self.get_token(max_attempts - 1)
+            logger.error("%s: %s", e.status, e.message)
+            # One second sleep time should be fine for now
+            await asyncio.sleep(1)
+            return None
+
+    # TODO: spotify clean up next
+    def spotify_multi_helper_func(self):
+        pass
+
+    def get_spotify_info(self, path_type: str, id: str) -> Playlist | Song | None:
+        pass
 
 
 def yt_json_parser(entries: list[dict[str, Any]]) -> list[Song] | None:
@@ -104,7 +124,6 @@ def get_youtube_info(url: str) -> Playlist | Song | None:
     # in song link that was mostly to filter out &radio
     # which would load a giant playlist when the user might
     # have only expected one song(Retard protection)
-    # This was to remove the &radio part of the link
     # Unsure if I want to keep this feature removed
     try:
         with YoutubeDL(params=YDL_OPTS) as ydl:
@@ -127,4 +146,9 @@ def get_youtube_info(url: str) -> Playlist | Song | None:
         return None
 
 
-# TODO: spotify clean up next
+def _get_audio_source(query: Song):
+    query
+
+
+async def get_audio_source(query: Song):
+    return await asyncio.to_thread(_get_audio_source, query)
