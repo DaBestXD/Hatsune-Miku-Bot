@@ -1,4 +1,6 @@
 from __future__ import annotations
+from aiohttp import ClientSession, ClientTimeout
+from hatsune_miku_bot.audio_utils.audio_handler import AudioInfoResolver
 import logging
 from discord import (
     Guild,
@@ -10,7 +12,6 @@ from discord import (
     app_commands,
 )
 from discord.ext import commands
-from hatsune_miku_bot.audio_utils.audio_handler import get_Song_Info
 from hatsune_miku_bot.audio_utils.guildstate_controller import (
     GuildStateController,
 )
@@ -22,6 +23,8 @@ from hatsune_miku_bot.botextras.bot_funcs_ext import (
     text_only_embed,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class MikuMusicCommands(commands.Cog):
     """
@@ -30,14 +33,31 @@ class MikuMusicCommands(commands.Cog):
     """
 
     def __init__(self, bot: commands.Bot) -> None:
-        self.logger = logging.getLogger(self.__class__.__name__)
         self.bot: commands.Bot = bot
         self.guildstate_con_dict: dict[int, GuildStateController] = {}
         self.synced: bool = False
+        self.audio_session: ClientSession | None = None
+        self.audio_info_resolver: AudioInfoResolver | None = None
+
+    async def cog_load(self) -> None:
+        if not self.audio_session:
+            logger.debug("Creating Audio session")
+            self.audio_session = ClientSession(timeout=ClientTimeout(total=10))
+            self.audio_info_resolver = AudioInfoResolver(self.audio_session)
+        else:
+            logger.debug("Audio session already created")
+
+    async def cog_unload(self) -> None:
+        if self.audio_session and not self.audio_session.closed:
+            logger.debug("Closing audio session")
+            await self.audio_session.close()
+            self.audio_info_resolver = None
+        else:
+            logger.debug("Audio session was already closed")
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild: Guild) -> None:
-        self.logger.info(
+        logger.info(
             "Removed %s[%d] from Guildstate Controller Dictionary", guild.name, guild.id
         )
         con = self.guildstate_con_dict.pop(guild.id, None)
@@ -47,7 +67,7 @@ class MikuMusicCommands(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: Guild) -> None:
-        self.logger.info(
+        logger.info(
             "Added %s[%d] to Guildstate Controller Dictionary", guild.name, guild.id
         )
         self.guildstate_con_dict[guild.id] = GuildStateController(self.bot, guild.id)
@@ -60,10 +80,10 @@ class MikuMusicCommands(commands.Cog):
             for g in self.bot.guilds:
                 self.guildstate_con_dict[g.id] = GuildStateController(self.bot, g.id)
                 await self.guildstate_con_dict[g.id].run()
-                self.logger.info("Added %s[%d] to GuildPlaybackState", g.name, g.id)
+                logger.info("Added %s[%d] to GuildPlaybackState", g.name, g.id)
             self.synced = True
         else:
-            self.logger.debug("GuildPlaybackState dict already initialized")
+            logger.debug("GuildPlaybackState dict already initialized")
         return None
 
     @commands.Cog.listener()
@@ -74,7 +94,7 @@ class MikuMusicCommands(commands.Cog):
             return None
         con = self.guildstate_con_dict[member.guild.id]
         if not before.channel and after.channel:
-            self.logger.debug(
+            logger.debug(
                 "Bot has joined the voice channel: %s at [%s]",
                 after.channel,
                 member.guild.name,
@@ -83,7 +103,7 @@ class MikuMusicCommands(commands.Cog):
                 con.state.vc = member.guild.voice_client
             return None
         if before.channel and not after.channel:
-            self.logger.debug(
+            logger.debug(
                 "Bot has left the voice channel: %s at [%s]",
                 before.channel,
                 member.guild.name,
@@ -91,7 +111,7 @@ class MikuMusicCommands(commands.Cog):
             con.state.vc = None
             return None
         if before.channel != after.channel:
-            self.logger.debug(
+            logger.debug(
                 "Bot has moved from %s to %s at [%s]",
                 before.channel,
                 after.channel,
@@ -113,7 +133,11 @@ class MikuMusicCommands(commands.Cog):
             return None
         if not isinstance(vc := await join_vc(interaction), VoiceClient):
             return None
-        result = await get_Song_Info(query)
+        audio_resolver = self.audio_info_resolver
+        if not audio_resolver:
+            logger.error("AudioInfoResolver was never created")
+            return None
+        result = await audio_resolver.get_song_info(query)
         if not result:
             await reply(
                 interaction, embed=text_only_embed(f"Error trying to play {query}")

@@ -3,7 +3,7 @@ import random
 from dataclasses import dataclass, field
 from hatsune_miku_bot.audio_utils.bot_audio_functions import build_audio
 import io
-from hatsune_miku_bot.audio_utils.audio_handler import get_Audio_Source
+from hatsune_miku_bot.audio_utils.audio_handler import get_audio_source
 from hatsune_miku_bot.botextras.bot_funcs_ext import reply, text_only_embed
 from discord import Interaction, VoiceClient, TextChannel, PCMVolumeTransformer
 from hatsune_miku_bot.audio_utils.audio_class import Song, Playlist
@@ -82,7 +82,7 @@ class GuildStateController:
         await self.add_event(self.remove_song_from_cache, song_url)
 
     async def cache_song(self, song: Song) -> None:
-        source = await get_Audio_Source(song)
+        source = await get_audio_source(song)
         if not source:
             logger.warning(
                 "Failed to cache audio for %s[%s]", song.title, song.webpage_url
@@ -136,8 +136,8 @@ class GuildStateController:
             return None
         source = self.state.song_cache.get(self.state.active_song.webpage_url)
         if not source:
-            logger.debug("Cache missing fetching source using ydl")
-            source = await get_Audio_Source(self.state.active_song)
+            logger.debug("Cache miss, fetching source using ydl")
+            source = await get_audio_source(self.state.active_song)
             if source:
                 song = self.state.active_song
                 logger.debug("Caching %s[%s]", song.title, song.webpage_url)

@@ -59,19 +59,19 @@ FFMPEG_OPTS = cast(
         "options": "-vn -af loudnorm=I=-12:TP=-1.0:LRA=7",
     },
 )
-SP_PLAYLIST_PARAMS = {
+SP_PLAYLIST_SONG_METADATA = {
     "market": "US",
     "fields": "items(track(name,duration_ms,artists(name),external_urls(spotify),album(images(url)))),next,total",
 }
-SP_ALBUM_PARAMS = {
+SP_ALBUM_SONG_METADATA = {
     "market": "US",
     "fields": "items(name,duration_ms,artists(name),external_urls(spotify)),next,total",
 }
-SP_PLAYLIST_META_PARAMS = {
+SP_PLAYLIST_METADATA = {
     "market": "US",
     "fields": "name,images(url),tracks(total)",
 }
-SP_ALBUM_META_PARAMS = {
+SP_ALBUM_METADATA = {
     "market": "US",
     "fields": "name,total_tracks,images(url)",
 }

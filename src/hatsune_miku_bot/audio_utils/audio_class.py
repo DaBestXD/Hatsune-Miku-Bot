@@ -1,7 +1,14 @@
 from __future__ import annotations
-from typing import Self, Any
+from typing import TYPE_CHECKING, Any, Iterable
+
+from typing import Self
 import time
 import discord
+
+if TYPE_CHECKING:
+    from yt_dlp.extractor.common import _InfoDict
+else:
+    _InfoDict = dict[str, Any]
 
 
 class Song:
@@ -33,19 +40,39 @@ class Song:
         self.source = ""
 
     @classmethod
-    def from_json(cls, json_input: dict[str, Any]) -> Self:
+    def from_spotify(
+        cls,
+        json_reponse: dict[str, Any],
+        album_thumbnail: str,
+    ) -> Self:
+        if album_thumbnail:
+            song_name = json_reponse["name"]
+            duration = json_reponse["duration_ms"] // 1000
+            artist = json_reponse["artists"][0]["name"]
+            spotify_url = json_reponse["external_urls"]["spotify"]
+        else:
+            song_name = json_reponse["name"]
+            spotify_url = json_reponse["external_urls"]["spotify"]
+            artist = json_reponse["artists"][0]["name"]
+            album_thumbnail = json_reponse["album"]["images"][0]["url"]
+            duration = json_reponse["duration_ms"] // 1000
+        title = song_name + " - " + artist
+        return cls(title, spotify_url, album_thumbnail, duration, "0")
+
+    @classmethod
+    def from_yt_dlp(cls, _info_dict: _InfoDict) -> Self:
         # TODO: this whole string situation needs to change
-        thumbnails = json_input.get("thumbnails")
+        thumbnails = _info_dict.get("thumbnails")
         thumbnail_url = ""
         # if not used here to exclude both empty lists and none values
-        if not thumbnails and isinstance(thumbnails, list):
+        if thumbnails and isinstance(thumbnails, list):
             thumbnail_url = thumbnails[-1]["url"]
         return cls(
-            title=str(json_input.get("title")),
-            webpage_url=str(json_input.get("url")),
+            title=str(_info_dict.get("title")),
+            webpage_url=str(_info_dict.get("url")),
             thumbnail_url=thumbnail_url,
-            duration=str(json_input.get("duration")),
-            view_count=str(json_input.get("view_count")),
+            duration=str(_info_dict.get("duration")),
+            view_count=str(_info_dict.get("view_count")),
         )
 
     def return_embed(
@@ -135,12 +162,36 @@ class Playlist:
         )
 
     @classmethod
-    def from_json(cls, result: dict[str, Any], entries: list[dict[str, Any]]) -> Self:
-        songs = [Song.from_json(e) for e in entries if e]
+    def from_spotify(
+        cls,
+        spotify_link: str,
+        json_metadata_response: dict[str, Any],
+        json_songs_response: dict[str, Any],
+        is_album: bool,
+    ) -> Self:
+        # Two different json responses one for playlist / album information
+        if is_album:
+            playlist_name = json_metadata_response["name"]
+            thumbnail_url = json_metadata_response["images"][0]["url"]
+            album_thumbnail = thumbnail_url
+        else:
+            playlist_name = json_metadata_response["name"]
+            thumbnail_url = json_metadata_response["images"][0]["url"]
+            album_thumbnail = ""
+        songs: list[Song] = []
+        for item in json_songs_response["items"]:
+            song_json = item if is_album else item.get("track")
+            if song_json:
+                songs.append(Song.from_spotify(song_json, album_thumbnail))
+        return cls(songs, playlist_name, spotify_link, thumbnail_url)
+
+    @classmethod
+    def from_yt_dlp(cls, result: _InfoDict, entries: Iterable[_InfoDict]) -> Self:
+        songs = [Song.from_yt_dlp(e) for e in entries if e]
         thumbnails = result.get("thumbnails")
         thumbnail_url = ""
         # if not used here to exclude both empty lists and none values
-        if not thumbnails and isinstance(thumbnails, list):
+        if thumbnails and isinstance(thumbnails, list):
             thumbnail_url = thumbnails[-1]["url"]
         return cls(
             songs,
