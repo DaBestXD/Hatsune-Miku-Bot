@@ -2,7 +2,7 @@ import argparse
 import asyncio
 import contextlib
 from hatsune_miku_bot.botconfig.bot import botsetup
-from hatsune_miku_bot.botconfig.loggerConfig import logger_config
+from hatsune_miku_bot.botconfig.logger_config import logger_config
 from hatsune_miku_bot.botextras.loadenv_values import load_env_vals
 from hatsune_miku_bot.db_stuff.db_logic import db_init, snapshot_loop
 

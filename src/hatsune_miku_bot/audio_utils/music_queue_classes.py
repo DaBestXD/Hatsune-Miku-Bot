@@ -4,7 +4,7 @@ from typing import Optional, TYPE_CHECKING
 from discord import Color, Interaction, VoiceClient, ui
 from hatsune_miku_bot.audio_utils.audio_class import Playlist
 from hatsune_miku_bot.audio_utils.bot_audio_functions import join_vc
-from hatsune_miku_bot.audio_utils.guildstate_controller_rewrite import (
+from hatsune_miku_bot.audio_utils.guildstate_controller import (
     GuildStateController,
 )
 from hatsune_miku_bot.botextras.constants import DIS_BOT_THUMBNAIL, INVIS_CHAR

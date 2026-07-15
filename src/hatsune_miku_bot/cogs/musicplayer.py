@@ -1,6 +1,5 @@
 from __future__ import annotations
 import logging
-import discord
 from discord import (
     Guild,
     Interaction,
@@ -12,7 +11,7 @@ from discord import (
 )
 from discord.ext import commands
 from hatsune_miku_bot.audio_utils.audio_handler import get_Song_Info
-from hatsune_miku_bot.audio_utils.guildstate_controller_rewrite import (
+from hatsune_miku_bot.audio_utils.guildstate_controller import (
     GuildStateController,
 )
 from hatsune_miku_bot.audio_utils.music_queue_classes import QueueEmbed, QueueView
@@ -43,7 +42,7 @@ class MikuMusicCommands(commands.Cog):
         )
         con = self.guildstate_con_dict.pop(guild.id, None)
         if con:
-            await con.add_event(con._stop_event)
+            await con.stop()
         return None
 
     @commands.Cog.listener()
@@ -133,7 +132,7 @@ class MikuMusicCommands(commands.Cog):
 
     @app_commands.command(name="queue", description="Gets song queue")
     @app_commands.guild_only()
-    async def queue(self, interaction: discord.Interaction) -> None:
+    async def queue(self, interaction: Interaction) -> None:
         """
         Usage /queue Displays current music queue
         """
@@ -154,7 +153,7 @@ class MikuMusicCommands(commands.Cog):
 
     @app_commands.command(name="skip", description="Skips current song")
     @app_commands.guild_only()
-    async def skip(self, interaction: discord.Interaction) -> None:
+    async def skip(self, interaction: Interaction) -> None:
         """
         Usage /skip Skips current song
         """
@@ -166,12 +165,13 @@ class MikuMusicCommands(commands.Cog):
             return None
         gp_con = self.guildstate_con_dict[guild_id]
         if not gp_con.state.songs:
-            await reply(interaction, embed=text_only_embed("Queue empty"))
+            await reply(interaction, embed=text_only_embed("Queue empty!"))
         await gp_con.add_event(gp_con.skip, interaction)
+        return None
 
     @app_commands.command(name="shuffle", description="Shuffles the queue")
     @app_commands.guild_only()
-    async def shuffle(self, interaction: discord.Interaction) -> None:
+    async def shuffle(self, interaction: Interaction) -> None:
         """
         Usage /shuffle Shuffles music queue
         """
@@ -179,13 +179,12 @@ class MikuMusicCommands(commands.Cog):
             return None
         await interaction.response.defer()
         gp_con = self.guildstate_con_dict[guild_id]
-        # TODO:
-        # await gp_con.add_event(Shuffle(interaction))
+        await gp_con.add_event(gp_con.shuffle, interaction)
         return None
 
     @app_commands.command(name="loop", description="Loop current song")
     @app_commands.guild_only()
-    async def loopSong(self, interaction: discord.Interaction) -> None:
+    async def loopSong(self, interaction: Interaction) -> None:
         """
         Usage /loop Loops current song
         """
@@ -193,15 +192,12 @@ class MikuMusicCommands(commands.Cog):
             return None
         await interaction.response.defer()
         gp_con = self.guildstate_con_dict[guild_id]
-        # TODO:
-        # await gp_con.add_event(LoopSong(interaction, gp_con.state.song_loop))
+        await gp_con.add_event(gp_con.loop_song, interaction)
 
     @app_commands.command(name="remove", description="Remove song from queue")
     @app_commands.describe(index="Must be a valid number to remove")
     @app_commands.guild_only()
-    async def removeFromQueue(
-        self, interaction: discord.Interaction, index: int
-    ) -> None:
+    async def removeFromQueue(self, interaction: Interaction, index: int) -> None:
         """
         Usage /remove [index] Removes song at index from queue
         """
@@ -209,13 +205,12 @@ class MikuMusicCommands(commands.Cog):
             return None
         await interaction.response.defer()
         gp_con = self.guildstate_con_dict[guild_id]
-        # TODO:
-        # await gp_con.add_event(RemoveFromQueue(interaction, index))
+        await gp_con.add_event(gp_con.remove_from_queue, interaction, index)
         return None
 
     @app_commands.command(name="stop", description="Disconnects bot from voice channel")
     @app_commands.guild_only()
-    async def stop(self, interaction: discord.Interaction) -> None:
+    async def stop(self, interaction: Interaction) -> None:
         """
         Usage /stop Clears the music queue and disconnects bot from call
         """
@@ -223,13 +218,12 @@ class MikuMusicCommands(commands.Cog):
             return None
         await interaction.response.defer()
         gp_con = self.guildstate_con_dict[guild_id]
-        # TODO:
-        # await gp_con.add_event(StopPlayblack(interaction))
+        await gp_con.add_event(gp_con.stop_playback, interaction)
         return None
 
     @app_commands.command(name="clear", description="Clears music queue")
     @app_commands.guild_only()
-    async def clear(self, interaction: discord.Interaction) -> None:
+    async def clear(self, interaction: Interaction) -> None:
         """
         Usage /clear Clears the current music queue
         """
@@ -237,8 +231,7 @@ class MikuMusicCommands(commands.Cog):
             return None
         await interaction.response.defer()
         gp_con = self.guildstate_con_dict[guild_id]
-        # TODO:
-        # await gp_con.add_event(ClearQueue(interaction))
+        await gp_con.add_event(gp_con.clear_queue, interaction)
         return None
 
     @app_commands.command(
@@ -248,7 +241,7 @@ class MikuMusicCommands(commands.Cog):
     @app_commands.guild_only()
     async def set_volume(
         self,
-        interaction: discord.Interaction,
+        interaction: Interaction,
         volume: app_commands.Range[float, 0.0, 2.0],
     ) -> None:
         """
@@ -258,14 +251,13 @@ class MikuMusicCommands(commands.Cog):
             return None
         await interaction.response.defer()
         gp_con = self.guildstate_con_dict[guild_id]
-        # TODO:
-        # await gp_con.add_event(VolumeControl(volume))
+        await gp_con.add_event(gp_con.change_volume, volume)
         await reply(interaction, embed=text_only_embed(f"Set volume to: {volume}"))
         return None
 
     @app_commands.command(name="night-core", description="Toggle night-core")
     @app_commands.guild_only()
-    async def night_core(self, interaction: discord.Interaction):
+    async def night_core(self, interaction: Interaction):
         """
         Usage /night_core Toggles nightcore on
         """
@@ -276,10 +268,9 @@ class MikuMusicCommands(commands.Cog):
         if not gp_con.state.songs:
             await reply(interaction, embed=text_only_embed("Queue empty!"))
             return None
-        if not isinstance(vc := await join_vc(interaction), VoiceClient):
+        if not isinstance(await join_vc(interaction, join=False), VoiceClient):
             return None
-        # TODO:
-        # await gp_con.add_event(Nightcore(interaction, vc))
+        await gp_con.add_event(gp_con.nightcore, interaction)
         return None
 
     @app_commands.command(name="bass-boost", description="Set bass of song to value")
@@ -287,9 +278,7 @@ class MikuMusicCommands(commands.Cog):
         effect_strength="Warning most values over 20 will distort sound(default value is 0)"
     )
     @app_commands.guild_only()
-    async def bass_boost(
-        self, interaction: discord.Interaction, effect_strength: float
-    ):
+    async def bass_boost(self, interaction: Interaction, effect_strength: float):
         """
         Usage /bass-boost [float]
         """
@@ -300,10 +289,9 @@ class MikuMusicCommands(commands.Cog):
         if not gp_con.state.songs:
             await reply(interaction, embed=text_only_embed("Queue empty!"))
             return None
-        if not isinstance(vc := await join_vc(interaction), VoiceClient):
+        if not isinstance(await join_vc(interaction, join=False), VoiceClient):
             return None
-        # TODO:
-        # await gp_con.add_event(SetBass(interaction, vc, effect_strength))
+        await gp_con.add_event(gp_con.set_bass, interaction, effect_strength)
         return None
 
     @app_commands.command(
@@ -315,7 +303,7 @@ class MikuMusicCommands(commands.Cog):
     @app_commands.guild_only()
     async def speed(
         self,
-        interaction: discord.Interaction,
+        interaction: Interaction,
         effect_strength: app_commands.Range[float, 0.01, 2.0],
     ):
         """
@@ -328,10 +316,9 @@ class MikuMusicCommands(commands.Cog):
         if not gp_con.state.songs:
             await reply(interaction, embed=text_only_embed("Queue empty!"))
             return None
-        if not isinstance(vc := await join_vc(interaction), VoiceClient):
+        if not isinstance(await join_vc(interaction, join=False), VoiceClient):
             return None
-        # TODO:
-        # await gp_con.add_event(SetSpeed(interaction, vc, effect_strength))
+        await gp_con.add_event(gp_con.set_speed, interaction, effect_strength)
         return None
 
 

@@ -1,413 +1,465 @@
-from typing import Any
-import asyncio
-import io
-import logging
 import time
 import random
-from collections.abc import Awaitable, Callable
-from discord import Interaction
-from discord.ext import commands
+from dataclasses import dataclass, field
+from hatsune_miku_bot.audio_utils.bot_audio_functions import build_audio
+import io
 from hatsune_miku_bot.audio_utils.audio_handler import get_Audio_Source
-from hatsune_miku_bot.audio_utils.bot_audio_functions import build_audio, mod_song
 from hatsune_miku_bot.botextras.bot_funcs_ext import reply, text_only_embed
-from hatsune_miku_bot.botextras.bot_events import (
-    FinishedPlayback,
-    ClearQueue,
-    LoopSong,
-    Nightcore,
-    QueueSongs,
-    RemoveFromQueue,
-    SetBass,
-    SetSpeed,
-    Shuffle,
-    Skip,
-    GuildPlaybackState,
-    Event,
-    StopPlayblack,
-    UpdateVoiceStatus,
-    VolumeControl,
-)
-from hatsune_miku_bot.botextras.constants import CACHE_TIMER_S
+from discord import Interaction, VoiceClient, TextChannel, PCMVolumeTransformer
+from hatsune_miku_bot.audio_utils.audio_class import Song, Playlist
+from typing import Any, ParamSpec, Literal
+from collections.abc import Callable, Coroutine
+import asyncio
+import logging
+from discord.ext import commands
 
-EventHandler = Callable[[Any], Awaitable[None]]
+logger = logging.getLogger(__name__)
+P = ParamSpec("P")
 
 
 class GuildStateController:
     def __init__(self, bot: commands.Bot, id: int) -> None:
-        self.logger = logging.getLogger(self.__class__.__name__)
         self.id = id
         self.bot = bot
-        self.queue: asyncio.Queue[Event] = asyncio.Queue()
+        self.queue: asyncio.Queue[Event | StopEvent] = asyncio.Queue()
         self.state = GuildPlaybackState()
         self.task: asyncio.Task | None = None
-        self.event_handlers: dict[type[Event], EventHandler] = {
-            QueueSongs: self._handle_queue_songs,
-            Skip: self._skip,
-            Shuffle: self._shuffle,
-            Nightcore: self._nightcore,
-            StopPlayblack: self._stop_playback,
-            VolumeControl: self._change_volume,
-            UpdateVoiceStatus: self._update_voice_status,
-            RemoveFromQueue: self._remove_from_queue,
-            LoopSong: self._loop_song,
-            ClearQueue: self._clear_queue,
-            FinishedPlayback: self._finished_playback,
-            SetBass: self._setbass,
-            SetSpeed: self._setspeed,
-        }
 
-    async def run(self):
+    async def add_event(
+        self,
+        func: Callable[P, Coroutine[Any, Any, None]],
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> None:
+        async def func_to_execute() -> None:
+            await func(*args, **kwargs)
+
+        await self.queue.put(Event(func_to_execute))
+
+    async def stop(self) -> None:
+        await self.queue.put(StopEvent())
+
+    async def run(self) -> None:
         if self.task and not self.task.done():
-            return
-        self.task = asyncio.create_task(self.main_loop())
-
-    async def stop(self):
-        if not self.task:
+            logger.debug("Main queue loop already running")
             return None
-        self.task.cancel()
-        try:
-            await self.task
-        except asyncio.CancelledError:
-            pass
-        self.task = None
+        self.task = asyncio.create_task(
+            self.main_loop(),
+            name=f"Main queue loop for {self.id}  created",
+        )
+        logger.debug("Main queue loop for %d created", self.id)
 
-    async def add_event(self, event: Event):
-        await self.queue.put(event)
-
-    async def main_loop(self):
+    async def main_loop(self) -> None:
         while True:
             event = await self.queue.get()
             try:
-                await self._handle_event(event)
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                self.logger.exception(
+                if isinstance(event, StopEvent):
+                    logger.debug("Stop event recieved, breaking loop")
+                    break
+                await event.func_to_execute()
+            except Exception:
+                logger.exception(
                     "Failed handling %s for guild %s",
                     type(event).__name__,
                     self.id,
                 )
-                self._fail_event(event, exc)
             finally:
                 self.queue.task_done()
 
-    async def _handle_event(self, event: Event) -> None:
-        handler = self.event_handlers.get(type(event))
-        if not handler:
-            self.logger.warning("Unknown event type: %s", type(event).__name__)
-            return None
-        await handler(event)
-        return None
-
-    def _fail_event(self, event: Event, exc: Exception) -> None:
-        done = getattr(event, "done", None)
-        self.logger.exception("%s", exc.__str__)
-        if done and not done.done():
-            done.set_exception(exc)
-        return None
-
-    # TODO fix later
-    async def remove_from_cache(self, song_url: str):
-        await asyncio.sleep(CACHE_TIMER_S)
-        if song_url in self.state.song_cache:
+    async def remove_song_from_cache(self, song_url: str) -> None:
+        try:
+            logger.debug("Removed %s from song cache", song_url)
             self.state.song_cache.pop(song_url)
+        except KeyError:
+            logger.warning("%s was missing from cache already", song_url)
+        return None
 
-    async def bad_cache(self):
+    async def schedule_removal_from_cache(
+        self, song_url: str, time_until_removal: float = 1800
+    ) -> None:
+        logger.debug("Removing %s in %d seconds", song_url, time_until_removal)
+        await asyncio.sleep(time_until_removal)
+        await self.add_event(self.remove_song_from_cache, song_url)
+
+    async def cache_song(self, song: Song) -> None:
+        source = await get_Audio_Source(song)
+        if not source:
+            logger.warning(
+                "Failed to cache audio for %s[%s]", song.title, song.webpage_url
+            )
+            return None
+        logger.debug("Caching %s[%s]", song.title, song.webpage_url)
+        self.state.song_cache[song.webpage_url] = source
+
+    async def begin_song_cache(self) -> None:
+        """
+        Cache the first 3 songs in the queue
+        """
         for s in self.state.songs[:3]:
             song = self.state.song_cache.get(s.webpage_url)
             if song:
                 continue
-            source = await get_Audio_Source(s)
-            if not source:
-                continue
-            self.state.song_cache[s.webpage_url] = source
-            asyncio.create_task(self.remove_from_cache(s.webpage_url))
+            await self.add_event(self.cache_song, s)
+            asyncio.create_task(self.schedule_removal_from_cache(s.webpage_url))
 
-    async def _change_volume(self, event: Event) -> None:
-        if not isinstance(event, VolumeControl):
-            return None
-        self.state.volume = event.volume
-        if self.state.source:
-            self.state.source.volume = event.volume
-        return None
-
-    async def _clear_queue(self, event: Event) -> None:
-        if not isinstance(event, ClearQueue):
-            return None
-        self.state.songs = []
-        if self.state.active_song:
-            self.state.songs.append(self.state.active_song)
-        await reply(event.interaction, embed=text_only_embed("Queue cleared!"))
-        return None
-
-    async def _loop_song(self, event: Event):
-        if not isinstance(event, LoopSong):
-            return None
-        self.state.song_loop = not event.loop
-        text = (
-            "🔁Now looping current song!🔁"
-            if self.state.song_loop
-            else "No longer looping current song!"
-        )
-        await reply(event.interaction, embed=text_only_embed(text))
-
-    async def _remove_from_queue(self, event: Event) -> None:
-        if not isinstance(event, RemoveFromQueue):
-            return None
-        try:
-            if event.idx == 0:
-                raise IndexError
-            await reply(
-                event.interaction,
-                embed=text_only_embed(
-                    f"Removing {self.state.songs[event.idx].title} from the queue!"
-                ),
-            )
-            self.state.songs.pop(event.idx)
-        except IndexError:
-            await reply(
-                event.interaction, embed=text_only_embed("Value must be within queue")
-            )
-        return None
-
-    async def _queue_helper(self, event: QueueSongs) -> None:
-        self.state.songs.extend(event.songs)
-        self.state.vc = event.vc
-        self.state.active_song = self.state.songs[0]
-        self.state.text_channel = event.text_channel
-        next_song = self.state.songs[1] if len(self.state.songs) >= 2 else None
-        if event.playlist:
-            await reply(event.interaction, embed=event.playlist.return_embed())
+    # TODO: DOCSTRING
+    async def queue_songs(
+        self, interaction: Interaction, item_to_add: Song | Playlist, vc: VoiceClient
+    ) -> None:
+        self.state.vc = vc
+        if isinstance(interaction.channel, TextChannel):
+            self.state.text_channel = interaction.channel
         else:
+            self.state.text_channel = None
+        if isinstance(item_to_add, Playlist):
+            self.state.songs.extend(item_to_add.songs)
+            await reply(interaction, embed=item_to_add.return_embed())
+        else:
+            self.state.songs.append(item_to_add)
+            next_song = self.state.songs[1] if len(self.state.songs) >= 2 else None
             await reply(
-                event.interaction,
-                embed=event.songs[0].return_embed(next_song, queued=True),
+                interaction, embed=item_to_add.return_embed(next_song, queued=True)
             )
+        await self.add_event(self.begin_song_cache)
 
-    async def _handle_queue_songs(self, event: QueueSongs) -> None:
-        await self._queue_helper(event)
-        if not event.vc.is_playing():
-            await self._play()
-        return None
-
-    async def _update_voice_status(self, event: UpdateVoiceStatus) -> None:
-        self.state.vc = event.vc
-        return None
-
-    def _playback_rate(self) -> float:
-        rate = 1.25 if self.state.nightcore else 1.0
-        if self.state.song_speed:
-            try:
-                rate *= float(self.state.song_speed.removeprefix(",atempo="))
-            except ValueError:
-                self.logger.warning(
-                    "Failed to parse playback speed for guild %s: %r",
-                    self.id,
-                    self.state.song_speed,
+    # TODO: DOCSTRING
+    async def begin_playback(self) -> None:
+        if not self.state.vc:
+            logger.warning("Attempted to play song while not in vc")
+            return None
+        self.state.active_song = self.state.songs[0] if self.state.songs else None
+        if not self.state.active_song:
+            logger.warning("Attempted to play song with no active song set")
+            return None
+        if self.state.vc.is_playing():
+            # Debug message here too noisy, will fire on skip/queue events, etc.
+            return None
+        source = self.state.song_cache.get(self.state.active_song.webpage_url)
+        if not source:
+            logger.debug("Cache missing fetching source using ydl")
+            source = await get_Audio_Source(self.state.active_song)
+            if source:
+                song = self.state.active_song
+                logger.debug("Caching %s[%s]", song.title, song.webpage_url)
+                self.state.song_cache[self.state.active_song.webpage_url] = source
+        if not source:
+            # Error branch if source cannot be found
+            logger.warning("No source found for %s", self.state.active_song.title)
+            if self.state.text_channel:
+                await self.state.text_channel.send(
+                    embed=self.state.songs[0].return_err_embed()
                 )
-        return rate
-
-    def _current_song_position(self) -> float:
-        if self.state.start_time is None:
-            return self.state.position_offset_s
-        elapsed_s = max(0.0, time.monotonic() - self.state.start_time)
-        return self.state.position_offset_s + (elapsed_s * self._playback_rate())
-
-    async def _play(self) -> None:
-        while self.state.active_song and self.state.vc:
-            song = self.state.active_song
-            source = self.state.song_cache.get(song.webpage_url)
-            if not source:
-                source = await get_Audio_Source(song)
-            if not source:
-                if self.state.text_channel:
-                    await self.state.text_channel.send(
-                        embed=self.state.songs[0].return_err_embed()
-                    )
-                self.state.songs.pop(0)
-                self.state.active_song = (
-                    self.state.songs[0] if self.state.songs else None
+            self.state.songs.pop(0)
+            self.state.active_song = self.state.songs[0] if self.state.songs else None
+            if self.state.active_song:
+                await self.add_event(self.begin_playback)
+            elif self.state.text_channel:
+                await self.state.text_channel.send(
+                    embed=text_only_embed("Queue empty🐱")
                 )
-                continue
-            stderr_buff = io.BytesIO()
-            seek_time = self.state.seek_time if self.state.seek_time else 0
-            # prob should change song_mods to be a class that builds one string
-            song_mods = (
-                self.state.song_bass + self.state.song_pitch + self.state.song_speed
-            )
-            built_source = await asyncio.to_thread(
-                build_audio,
-                self.state.volume,
-                source,
-                stderr_buff,
-                seek_time,
-                song_mods,
-            )
-            self.state.source = built_source
-            self.state.vc.play(
-                built_source,
-                after=lambda error, stderr_buff=stderr_buff: self._callback_queue(
-                    error, stderr_buff
-                ),
-            )
-            self.state.position_offset_s = seek_time
-            self.state.start_time = time.monotonic()
-            self.state.seek_time = None
-            if not self.state.mod_song:
-                if self.state.text_channel:
-                    next_song = (
-                        self.state.songs[1] if len(self.state.songs) >= 2 else None
-                    )
-                    await self.state.text_channel.send(
-                        embed=song.return_embed(next_song)
-                    )
             else:
-                self.state.mod_song = False
-            self.state.song_cache[song.webpage_url] = source
-            await self.bad_cache()
+                logger.debug(
+                    "No text channel was set for erorr branch in %s",
+                    self.begin_playback.__name__,
+                )
+            return None
+        stderr_buff = io.BytesIO()
+        built_source = await asyncio.to_thread(
+            build_audio,
+            self.state.song_mods.volume,
+            source,
+            stderr_buff,
+            self.state.song_mods.position_offset_s,
+            self.state.song_mods.combined_song_mods,
+        )
+        self.state.source = built_source
+        self.state.song_mods.start_timestamp = time.monotonic()
+        self.state.vc.play(
+            built_source,
+            after=lambda error: self.after_callback(error, stderr_buff),
+        )
+        if self.state.song_mods.is_song_modified:
+            self.state.song_mods.is_song_modified = False
             return None
         if self.state.text_channel:
-            await self.state.text_channel.send(embed=text_only_embed("Queue empty🐱"))
-        return None
+            next_song = self.state.songs[1] if len(self.state.songs) >= 2 else None
+            await self.state.text_channel.send(
+                embed=self.state.active_song.return_embed(next_song)
+            )
+        else:
+            logger.warning(
+                "No text channel was set for %s", self.begin_playback.__name__
+            )
+        await self.add_event(self.begin_playback)
 
-    def _callback_queue(
-        self,
-        error: Exception | None,
-        stderr_buff: io.BytesIO,
-    ) -> None:
+    def after_callback(self, error: Exception | None, stderr_buff: io.BytesIO) -> None:
         if error:
-            ...
+            logger.error("%s", error)
         ffmpeg_error = stderr_buff.getvalue().decode("utf-8", errors="ignore")
         asyncio.run_coroutine_threadsafe(
-            self.add_event(FinishedPlayback(ffmpeg_error)), self.bot.loop
+            self.add_event(self.finished_playback, ffmpeg_error), self.bot.loop
         )
         return None
 
-    async def _finished_playback(self, event: Event) -> None:
-        if not isinstance(event, FinishedPlayback):
-            return None
-        if "403 Forbidden" in event.ffmpeg_error:
-            if self.state.active_song:
-                try:
-                    self.state.song_cache.pop(self.state.active_song.webpage_url)
-                except KeyError:
-                    ...
-        if self.state.songs:
-            if not self.state.song_loop:
-                self.state.songs.pop(0)
+    async def finished_playback(self, ffmpeg_error: str):
+        if "403 Forbidden" in ffmpeg_error:
+            # TODO: add cache removal
+            pass
+        if not self.state.song_mods.is_song_modified:
+            self.state.song_mods.start_timestamp = None
+            self.state.song_mods.position_offset_s = 0
+        if not self.state.song_mods.song_loop and self.state.songs:
+            self.state.songs.pop(0)
         self.state.active_song = self.state.songs[0] if self.state.songs else None
-        await self._play()
-        return None
+        if not self.state.active_song:
+            if not self.state.text_channel:
+                logger.warning(
+                    "Text channel was none for %s", self.finished_playback.__name__
+                )
+                return None
+            await self.state.text_channel.send(embed=text_only_embed("Queue empty🐱"))
+            return None
+        else:
+            await self.add_event(self.begin_playback)
 
-    async def _skip(self, event: Skip) -> None:
+    async def skip(self, interaction: Interaction) -> None:
         next_song = self.state.songs[1] if len(self.state.songs) >= 2 else None
         if self.state.active_song:
             await reply(
-                event.interaction,
+                interaction,
                 embed=self.state.active_song.return_skip_embed(next_song),
             )
-        self.state.song_loop = False
+        self.state.song_mods.song_loop = False
         if self.state.vc:
             self.state.vc.stop()
-        await self.bad_cache()
+        else:
+            logger.warning("Skip was called while not in vc")
+        await self.add_event(self.begin_song_cache)
         return None
 
-    async def _shuffle(self, event: Shuffle) -> None:
-        await reply(event.interaction, embed=text_only_embed("🔀Queue shuffled🔀"))
-        if self.state.songs and len(self.state.songs) > 2:
-            head = [self.state.songs[0]]
-            body = self.state.songs[1:] if len(self.state.songs) > 1 else []
-            random.shuffle(body)
-            self.state.songs = head + body
-        if event.done and not event.done.done():
-            event.done.set_result(None)
-        await self.bad_cache()
-        return None
-
-    async def _song_mod_helper(
-        self,
-        interaction: Interaction,
-        text: str,
-        resume_position_s: float | None = None,
-    ) -> None:
-        if self.state.vc and self.state.active_song:
-            self.state.songs.insert(1, self.state.active_song)
-            self.state.seek_time = (
-                resume_position_s
-                if resume_position_s is not None
-                else self._current_song_position()
-            )
-            self.state.vc.stop()
-            await reply(interaction, embed=text_only_embed(text))
-        return None
-
-    async def _nightcore(self, event: Nightcore) -> None:
-        resume_position_s = self._current_song_position()
-        self.state.song_pitch = (
-            await mod_song("pitch", 1.25)
-            if not self.state.song_pitch
-            else await mod_song("off")
-        )
-        self.state.mod_song = True
-        text = "Nightcore on!🙀" if not self.state.nightcore else "Nightcore off!😿"
-        self.state.nightcore = not self.state.nightcore
-        await self._song_mod_helper(event.interaction, text, resume_position_s)
-        if event.done and not event.done.done():
-            event.done.set_result(None)
-        return None
-
-    async def _setbass(self, event: SetBass) -> None:
-        self.state.song_bass = await mod_song(
-            "bass", effect_strength=event.effect_strength
-        )
-        self.state.mod_song = True
-        text = f"Bass set to {event.effect_strength}!"
-        await self._song_mod_helper(event.interaction, text)
-        return None
-
-    async def _setspeed(self, event: SetSpeed) -> None:
-        resume_position_s = self._current_song_position()
-        self.state.song_speed = await mod_song(
-            "speed", effect_strength=event.effect_strength
-        )
-        self.state.mod_song = True
-        text = f"Speed set to {event.effect_strength}!"
-        await self._song_mod_helper(event.interaction, text, resume_position_s)
-        return None
-
-    async def _stop_playback(self, event: StopPlayblack) -> None:
-        self.state.active_song = None
-        self.state.position_offset_s = 0.0
-        self.state.seek_time = None
-        self.state.text_channel = None
-        self.state.start_time = None
-        self.state.source = None
-        self.state.nightcore = False
-        self.state.song_loop = False
-        self.state.mod_song = False
-        self.state.song_pitch = ""
-        self.state.song_bass = ""
-        self.state.song_speed = ""
-        self.state.songs = []
+    async def stop_playback(self, interaction: Interaction) -> None:
+        self.state.song_mods.reset_all_values()
         if self.state.vc:
             if self.state.vc.is_playing():
                 self.state.vc.stop()
             await self.state.vc.disconnect()
         self.state.vc = None
-        await reply(event.interaction, embed=text_only_embed("Stopping playback..."))
+        self.state.songs = []
+        self.state.text_channel = None
+        self.state.active_song = None
+        await reply(interaction, embed=text_only_embed("Stopping playback..."))
 
-    async def hard_reset(self) -> None:
-        await self.stop()
-        if self.state.vc:
-            try:
-                if self.state.vc.is_playing():
-                    self.state.vc.stop()
-            except Exception:
-                pass
-            try:
-                await self.state.vc.disconnect()
-            except Exception:
-                pass
-        self.state = GuildPlaybackState()
-        self.queue = asyncio.Queue()
-        await self.run()
+    async def shuffle(self, interaction: Interaction) -> None:
+        await reply(interaction, embed=text_only_embed("🔀Queue shuffled🔀"))
+        if self.state.songs and len(self.state.songs) > 2:
+            head = [self.state.songs[0]]
+            body = self.state.songs[1:] if len(self.state.songs) > 1 else []
+            random.shuffle(body)
+            self.state.songs = head + body
+        await self.add_event(self.begin_song_cache)
+
+    async def change_volume(self, new_volume: float) -> None:
+        self.state.song_mods.volume = new_volume
+        if self.state.source:
+            self.state.source.volume = new_volume
+        return None
+
+    async def clear_queue(self, interaction: Interaction) -> None:
+        self.state.songs = []
+        if self.state.active_song:
+            self.state.songs.append(self.state.active_song)
+        await reply(interaction, embed=text_only_embed("Queue cleared!"))
+        return None
+
+    async def loop_song(self, interaction: Interaction):
+        self.state.song_mods.song_loop = not self.state.song_mods.song_loop
+        text = (
+            "🔁Now looping current song!🔁"
+            if self.state.song_mods.song_loop
+            else "No longer looping current song!"
+        )
+        await reply(interaction, embed=text_only_embed(text))
+
+    async def remove_from_queue(
+        self, interaction: Interaction, idx_to_remove: int
+    ) -> None:
+        try:
+            if idx_to_remove == 0:
+                raise IndexError
+            await reply(
+                interaction,
+                embed=text_only_embed(
+                    f"Removing {self.state.songs[idx_to_remove].title} from the queue!"
+                ),
+            )
+            self.state.songs.pop(idx_to_remove)
+        except IndexError:
+            await reply(
+                interaction, embed=text_only_embed("Value must be within queue")
+            )
+        return None
+
+    async def _modify_song_playback(
+        self, interaction: Interaction, embed_text: str
+    ) -> None:
+        self.state.song_mods.is_song_modified = True
+        if self.state.vc and self.state.active_song:
+            # Steps to modify song insert copy of song into queue
+            self.state.songs.insert(1, self.state.active_song)
+            self.state.vc.stop()
+        else:
+            logger.warning("Attempted to modify song without an active song")
+        await reply(interaction, embed=text_only_embed(embed_text))
+
+    async def nightcore(self, interaction: Interaction) -> None:
+        self.state.song_mods.position_offset_s = self.state.song_mods.interrupt_time()
+        if self.state.song_mods.is_nightcore():
+            self.state.song_mods.song_pitch = None
+            text = "Nightcore off!😿"
+        else:
+            self.state.song_mods.song_pitch = 1.25
+            text = "Nightcore on!🙀"
+        await self._modify_song_playback(interaction, text)
+        return None
+
+    async def set_bass(self, interaction: Interaction, effect_strength: float) -> None:
+        self.state.song_mods.position_offset_s = self.state.song_mods.interrupt_time()
+        self.state.song_mods.song_bass = effect_strength
+        await self._modify_song_playback(interaction, f"Bass set to {effect_strength}")
+        return None
+
+    async def set_speed(self, interaction: Interaction, effect_strength: float) -> None:
+        self.state.song_mods.position_offset_s = self.state.song_mods.interrupt_time()
+        self.state.song_mods.song_speed = effect_strength
+        await self._modify_song_playback(interaction, f"Speed set to {effect_strength}")
+        return None
+
+
+@dataclass
+class StopEvent:
+    pass
+
+
+@dataclass
+class Event:
+    """
+    Fields:
+        `func_to_execute: Callable[[], Coroutine[Any, Any, None]]`
+    """
+
+    func_to_execute: Callable[[], Coroutine[Any, Any, None]]
+
+
+class SongMods:
+    def __init__(self):
+        self.is_song_modified: bool = False
+        self.song_bass: float | None = None
+        self.song_loop: bool = False
+        self.song_loop_all: bool = False
+        self.song_speed: float | None = None
+        self.song_pitch: float | None = None
+        self.start_timestamp: float | None = None
+        self.position_offset_s: float = 0
+        self.volume: float = 1.0
+
+    @property
+    def effective_playback_rate(self) -> float:
+        rate: float = 1.0
+        if self.song_speed:
+            rate *= self.song_speed
+        if self.song_pitch:
+            rate *= self.song_pitch
+        return rate
+
+    def update_song_position_offset(self) -> None:
+        if self.start_timestamp:
+            self.position_offset_s = (
+                time.monotonic() - self.start_timestamp
+            ) * self.effective_playback_rate
+            logger.debug("Position offset %2f", self.position_offset_s)
+
+    def is_nightcore(self) -> bool:
+        """
+        Nightcore is equivalent to pitch=1.25
+        """
+        return True if self.song_pitch == 1.25 else False
+
+    def interrupt_time(self) -> float:
+        if self.start_timestamp is None:
+            logger.warning("Start timestamp was not found")
+            return self.position_offset_s
+
+        elapsed = time.monotonic() - self.start_timestamp
+        return self.position_offset_s + (elapsed * self.effective_playback_rate)
+
+    @property
+    def is_song_mods_on(self) -> bool:
+        if self.song_bass:
+            return True
+        if self.song_speed:
+            return True
+        if self.song_pitch:
+            return True
+        return False
+
+    @property
+    def combined_song_mods(self) -> str:
+        """
+        Return a string ready for ffmpeg of all the current song mods
+        """
+        combined_str = ""
+        if self.song_bass:
+            combined_str += _song_mod_to_ffmpeg_str("bass", self.song_bass)
+        if self.song_speed:
+            combined_str += _song_mod_to_ffmpeg_str("speed", self.song_speed)
+        if self.song_pitch:
+            combined_str += _song_mod_to_ffmpeg_str("pitch", self.song_pitch)
+        return combined_str
+
+    def reset_all_values(self) -> None:
+        """
+        Reset all class attributes to none or default values
+        """
+        self.song_bass: float | None = None
+        self.song_loop: bool = False
+        self.song_loop_all: bool = False
+        self.song_speed: float | None = None
+        self.song_pitch: float | None = None
+        self.start_timestamp: float | None = None
+        self.position_offset_s: float = 0.0
+        self.volume: float = 1.0
+
+
+@dataclass
+class GuildPlaybackState:
+    active_song: Song | None = None
+    songs: list[Song] = field(default_factory=list)
+    song_cache: dict[str, str] = field(default_factory=dict)
+    song_mods: SongMods = field(default_factory=SongMods)
+    source: PCMVolumeTransformer | None = None
+    text_channel: TextChannel | None = None
+    vc: VoiceClient | None = None
+    is_modifying_song: bool = False
+
+
+def _song_mod_to_ffmpeg_str(
+    mod_type: Literal["pitch", "speed", "bass", "off"],
+    effect_strength: float,
+) -> str:
+    """
+    Build an str ready for ffmpeg song mod options
+    """
+    if mod_type == "pitch":
+        return f",aresample=48000,asetrate=48000*{effect_strength},aresample=48000"
+    if mod_type == "speed":
+        return f",atempo={effect_strength}"
+    if mod_type == "bass":
+        return f",bass=g={effect_strength}"
+    if mod_type == "off":
+        return ""
+
+
+# Step 1 song plays monotonic timestamp
+#
+# Step 2 song is modified(speedwise) get effective_playback_rate * (start time - monotonic timestamp)
+# Seek_time = step 2
