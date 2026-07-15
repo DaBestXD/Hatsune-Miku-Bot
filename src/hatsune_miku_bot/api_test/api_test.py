@@ -1,5 +1,6 @@
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from hatsune_miku_bot.api_test.api_helpers import (
     all_uptime_windows,
     get_status,

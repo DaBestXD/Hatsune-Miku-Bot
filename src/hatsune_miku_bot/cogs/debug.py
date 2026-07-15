@@ -1,20 +1,23 @@
 import logging
+
 import discord
-from hatsune_miku_bot.audio_utils.guildstate_controller import GuildStateController
-from hatsune_miku_bot.botextras.constants import GUILD_OBJECT
-from hatsune_miku_bot.botextras.bot_funcs_ext import (
+from discord import Interaction, app_commands
+from discord.ext import commands
+
+from hatsune_miku_bot.audio.audio_resolver import Song
+from hatsune_miku_bot.audio.guild_state_controller import GuildStateController
+from hatsune_miku_bot.bot_config.constants import GUILD_OBJECT
+from hatsune_miku_bot.cogs.music import MikuMusicCommands
+from hatsune_miku_bot.utils.discord_helpers import (
+    code_block_embed,
     owner_command,
     reply,
     text_only_embed,
-    code_block_embed,
 )
-from discord.ext import commands
-from discord import Interaction, app_commands
-from hatsune_miku_bot.audio_utils.audio_class import Song
-from hatsune_miku_bot.cogs.musicplayer import MikuMusicCommands
 
 
-class botDebugger(commands.Cog):
+# TODO: fix this later
+class BotDebugger(commands.Cog):
     """
     Bot debugging commandsn
     Cogname: debugger
@@ -22,14 +25,14 @@ class botDebugger(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot: commands.Bot = bot
-        self.logger = logging.getLogger(__class__.__name__)
+        self.logger = logging.getLogger(self.__class__.__name__)
 
     @app_commands.command(name="cog_reload", description="Reloads a cog")
     @app_commands.guilds(GUILD_OBJECT)
     @app_commands.guild_only()
     @owner_command()
     async def reload_cog(self, interaction: Interaction, cog_name: str):
-        if not cog_name in self.bot.extensions:
+        if cog_name not in self.bot.extensions:
             await reply(interaction, embed=text_only_embed("🙀"))
             return None
         await self.bot.reload_extension(cog_name)
@@ -40,11 +43,14 @@ class botDebugger(commands.Cog):
     async def cog_ext_name_autocomplete(
         self, interaction: Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        return [app_commands.Choice(name=s, value=s) for s in self.bot.extensions]
+        return [
+            app_commands.Choice(name=s, value=s) for s in self.bot.extensions
+        ]
 
     def return_commands_embed(self, cog: commands.Cog) -> discord.Embed:
         return code_block_embed(
-            txt=[i.name for i in cog.__cog_app_commands__], title=cog.__class__.__name__
+            txt=[i.name for i in cog.__cog_app_commands__],
+            title=cog.__class__.__name__,
         )
 
     def return_guild_state_embed(
@@ -57,7 +63,9 @@ class botDebugger(commands.Cog):
             song.title for song in state.songs[:5] if isinstance(song, Song)
         ]
         queue_preview = (
-            "\n".join(f"{idx}. {title}" for idx, title in enumerate(preview_songs))
+            "\n".join(
+                f"{idx}. {title}" for idx, title in enumerate(preview_songs)
+            )
             or "Queue empty"
         )
 
@@ -91,7 +99,7 @@ class botDebugger(commands.Cog):
             name="Channels",
             value=(
                 f"Text channel: `{getattr(state.text_channel, 'name', None)}`\n"
-                f"Voice channel: `{getattr(getattr(state.vc, 'channel', None), 'name', None)}`"
+                f"Voice channel: `{getattr(getattr(state.vc, 'channel', None), 'name', None)}`"  # noqa: E501
             ),
             inline=False,
         )
@@ -107,7 +115,9 @@ class botDebugger(commands.Cog):
     @app_commands.guilds(GUILD_OBJECT)
     @app_commands.guild_only()
     @owner_command()
-    async def dump_cog_info(self, interaction: Interaction, cog_class_name: str):
+    async def dump_cog_info(
+        self, interaction: Interaction, cog_class_name: str
+    ):
         if not (ext_cog := self.bot.get_cog(cog_class_name)):
             await reply(interaction, embed=text_only_embed("🙀"))
             return None
@@ -120,7 +130,9 @@ class botDebugger(commands.Cog):
             guild_name = (
                 guild.name if (guild := self.bot.get_guild(g_id)) else str(g_id)
             )
-            list_embeds.append(self.return_guild_state_embed(gp_con, guild_name))
+            list_embeds.append(
+                self.return_guild_state_embed(gp_con, guild_name)
+            )
         for e in list_embeds:
             await reply(interaction, embed=e)
         return None
@@ -134,4 +146,4 @@ class botDebugger(commands.Cog):
 
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(botDebugger(bot))
+    await bot.add_cog(BotDebugger(bot))

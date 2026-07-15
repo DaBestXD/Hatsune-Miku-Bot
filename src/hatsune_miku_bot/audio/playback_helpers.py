@@ -1,14 +1,16 @@
 import io
 from typing import Literal
+
 from discord import (
     FFmpegPCMAudio,
-    PCMVolumeTransformer,
     Interaction,
-    VoiceProtocol,
+    PCMVolumeTransformer,
     User,
+    VoiceProtocol,
 )
-from hatsune_miku_bot.botextras.constants import FFMPEG_OPTS
-from hatsune_miku_bot.botextras.bot_funcs_ext import reply, text_only_embed
+
+from hatsune_miku_bot.bot_config.constants import FFMPEG_OPTS
+from hatsune_miku_bot.utils.discord_helpers import reply, text_only_embed
 
 
 def build_audio(
@@ -26,13 +28,15 @@ def build_audio(
     return PCMVolumeTransformer(pcmaud, volume=volume)
 
 
-async def join_vc(interaction: Interaction, join: bool = True) -> None | VoiceProtocol:
+async def join_vc(
+    interaction: Interaction, join: bool = True
+) -> None | VoiceProtocol:
     guild = interaction.guild
     user = interaction.user
     if not guild or isinstance(user, User):
         await reply(
             interaction,
-            "Erm bot does not work in dms...How did you even add the bot to a dm 😹",
+            "Erm bot does not work in dms...How did you even add the bot to a dm 😹",  # noqa: E501
         )
         return None
     # guild voice client checks if bot is already in voice chat
@@ -51,11 +55,14 @@ async def join_vc(interaction: Interaction, join: bool = True) -> None | VoicePr
 
 
 async def mod_song(
-    mod_type: Literal["pitch", "speed", "bass", "off"], effect_strength: float = 0
+    mod_type: Literal["pitch", "speed", "bass", "off"],
+    effect_strength: float = 0,
 ) -> str:
     song_mods = ""
     if mod_type == "pitch":
-        song_mods = f",aresample=48000,asetrate=48000*{effect_strength},aresample=48000"
+        song_mods = (
+            f",aresample=48000,asetrate=48000*{effect_strength},aresample=48000"
+        )
     elif mod_type == "speed":
         song_mods = f",atempo={effect_strength}"
     elif mod_type == "bass":

@@ -1,8 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, Iterable
 
-from typing import Self
 import time
+from typing import TYPE_CHECKING, Any, Iterable, Self
+
 import discord
 
 if TYPE_CHECKING:
@@ -117,7 +117,9 @@ class Song:
     def return_skip_embed(
         self, next_song: Song | None = None, char_limit: int = 30
     ) -> discord.Embed:
-        safe_title = self.title.replace("[", "【").replace("]", "】")[:char_limit]
+        safe_title = self.title.replace("[", "【").replace("]", "】")[
+            :char_limit
+        ]
         if len(safe_title) >= char_limit:
             safe_title += "..."
         footer_text: str = (
@@ -186,7 +188,9 @@ class Playlist:
         return cls(songs, playlist_name, spotify_link, thumbnail_url)
 
     @classmethod
-    def from_yt_dlp(cls, result: _InfoDict, entries: Iterable[_InfoDict]) -> Self:
+    def from_yt_dlp(
+        cls, result: _InfoDict, entries: Iterable[_InfoDict]
+    ) -> Self:
         songs = [Song.from_yt_dlp(e) for e in entries if e]
         thumbnails = result.get("thumbnails")
         thumbnail_url = ""
@@ -225,7 +229,9 @@ class Playlist:
 
     def greatest_view_count(self) -> Song | None:
         valid_songs = [
-            s for s in self.songs if s.view_count and str(s.view_count).isnumeric()
+            s
+            for s in self.songs
+            if s.view_count and str(s.view_count).isnumeric()
         ]
         if not valid_songs:
             return None
@@ -242,4 +248,4 @@ class Playlist:
             )
 
     def __str__(self) -> str:
-        return f"""Playlist title: {self.playlist_title}\nPlaylist url: {self.playlist_url}\nPlaylist length: {self.length}\nPlaylist thumbnail: {self.playlist_thumbnail}\nTotal duration: {self.formatted_duration} """
+        return f"""Playlist title: {self.playlist_title}\nPlaylist url: {self.playlist_url}\nPlaylist length: {self.length}\nPlaylist thumbnail: {self.playlist_thumbnail}\nTotal duration: {self.formatted_duration} """  # noqa: E501

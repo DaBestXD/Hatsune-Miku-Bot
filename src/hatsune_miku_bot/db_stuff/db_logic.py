@@ -1,12 +1,15 @@
-import aiosqlite
 import asyncio
-from hatsune_miku_bot.botextras.constants import DB_PATH
-from typing import TYPE_CHECKING, Literal
-from hatsune_miku_bot.db_stuff.db_schema import CREATE_EVENTS, CREATE_SNAPSHOTS
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Literal
+
+# ruff: noqa: E501
+import aiosqlite
+
+from hatsune_miku_bot.bot_config.constants import DB_PATH
+from hatsune_miku_bot.db_stuff.db_schema import CREATE_EVENTS, CREATE_SNAPSHOTS
 
 if TYPE_CHECKING:
-    from hatsune_miku_bot.botconfig.bot import Bot
+    from hatsune_miku_bot.bot_config.client import Bot
 
 
 async def db_init():
@@ -25,7 +28,11 @@ async def insert_event(
             INSERT INTO events(event_type, event_time, details)
             VALUES(:event_type, :event_time, :details)
         """
-        args = {"event_type": event_type, "event_time": event_time, "details": details}
+        args = {
+            "event_type": event_type,
+            "event_time": event_time,
+            "details": details,
+        }
         await con.execute(query, args)
         await con.commit()
 

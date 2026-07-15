@@ -1,9 +1,10 @@
 import argparse
 import asyncio
 import contextlib
-from hatsune_miku_bot.botconfig.bot import botsetup
-from hatsune_miku_bot.botconfig.logger_config import logger_config
-from hatsune_miku_bot.botextras.loadenv_values import load_env_vals
+
+from hatsune_miku_bot.bot_config.client import botsetup
+from hatsune_miku_bot.bot_config.env_loader import load_env_vals
+from hatsune_miku_bot.bot_config.logging_config import logger_config
 from hatsune_miku_bot.db_stuff.db_logic import db_init, snapshot_loop
 
 
@@ -13,7 +14,10 @@ def args() -> argparse.Namespace:
         "-d", "--docker", help="Used for docker run.", action="store_true"
     )
     parser.add_argument(
-        "-D", "--debugger", help="Launch bot with debug commands", action="store_true"
+        "-D",
+        "--debugger",
+        help="Launch bot with debug commands",
+        action="store_true",
     )
     return parser.parse_args()
 

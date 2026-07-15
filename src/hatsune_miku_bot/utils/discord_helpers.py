@@ -1,15 +1,18 @@
 from __future__ import annotations
+
 from typing import TypedDict, Unpack
+
 import discord
-from hatsune_miku_bot.botextras.constants import USER_ID
-from hatsune_miku_bot.botextras.config import ASSET_DIR
 from discord import (
     Color,
     Interaction,
-    WebhookMessage,
     InteractionCallbackResponse,
+    WebhookMessage,
     app_commands,
 )
+
+from hatsune_miku_bot.bot_config.constants import USER_ID
+from hatsune_miku_bot.bot_config.paths import ASSET_DIR
 
 
 class _ReplyDict(TypedDict, total=False):
@@ -26,7 +29,9 @@ def owner_command():
 
 
 async def reply(
-    interaction: discord.Interaction, msg: str = "", **kwargs: Unpack[_ReplyDict]
+    interaction: discord.Interaction,
+    msg: str = "",
+    **kwargs: Unpack[_ReplyDict],
 ) -> WebhookMessage | InteractionCallbackResponse | None:
     try:
         if interaction.response.is_done():

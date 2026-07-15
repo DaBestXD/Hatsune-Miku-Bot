@@ -1,7 +1,8 @@
 from __future__ import annotations
-from aiohttp import ClientSession, ClientTimeout
-from hatsune_miku_bot.audio_utils.audio_handler import AudioInfoResolver
+
 import logging
+
+from aiohttp import ClientSession, ClientTimeout
 from discord import (
     Guild,
     Interaction,
@@ -12,12 +13,14 @@ from discord import (
     app_commands,
 )
 from discord.ext import commands
-from hatsune_miku_bot.audio_utils.guildstate_controller import (
+
+from hatsune_miku_bot.audio.audio_resolver import AudioInfoResolver
+from hatsune_miku_bot.audio.guild_state_controller import (
     GuildStateController,
 )
-from hatsune_miku_bot.audio_utils.music_queue_classes import QueueEmbed, QueueView
-from hatsune_miku_bot.audio_utils.bot_audio_functions import join_vc
-from hatsune_miku_bot.botextras.bot_funcs_ext import (
+from hatsune_miku_bot.audio.playback_helpers import join_vc
+from hatsune_miku_bot.audio.queue_view import QueueEmbed, QueueView
+from hatsune_miku_bot.utils.discord_helpers import (
     gen_bot_thumbnail,
     reply,
     text_only_embed,
@@ -58,7 +61,9 @@ class MikuMusicCommands(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_remove(self, guild: Guild) -> None:
         logger.info(
-            "Removed %s[%d] from Guildstate Controller Dictionary", guild.name, guild.id
+            "Removed %s[%d] from Guildstate Controller Dictionary",
+            guild.name,
+            guild.id,
         )
         con = self.guildstate_con_dict.pop(guild.id, None)
         if con:
@@ -68,9 +73,13 @@ class MikuMusicCommands(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_join(self, guild: Guild) -> None:
         logger.info(
-            "Added %s[%d] to Guildstate Controller Dictionary", guild.name, guild.id
+            "Added %s[%d] to Guildstate Controller Dictionary",
+            guild.name,
+            guild.id,
         )
-        self.guildstate_con_dict[guild.id] = GuildStateController(self.bot, guild.id)
+        self.guildstate_con_dict[guild.id] = GuildStateController(
+            self.bot, guild.id
+        )
         await self.guildstate_con_dict[guild.id].run()
         return None
 
@@ -78,7 +87,9 @@ class MikuMusicCommands(commands.Cog):
     async def on_ready(self) -> None:
         if not self.synced:
             for g in self.bot.guilds:
-                self.guildstate_con_dict[g.id] = GuildStateController(self.bot, g.id)
+                self.guildstate_con_dict[g.id] = GuildStateController(
+                    self.bot, g.id
+                )
                 await self.guildstate_con_dict[g.id].run()
                 logger.info("Added %s[%d] to GuildPlaybackState", g.name, g.id)
             self.synced = True
@@ -121,8 +132,12 @@ class MikuMusicCommands(commands.Cog):
                 con.state.vc = member.guild.voice_client
         return None
 
-    @app_commands.command(name="play", description="Enter song name or song url")
-    @app_commands.describe(query="Currently does not support soundcloud playlists")
+    @app_commands.command(
+        name="play", description="Enter song name or song url"
+    )
+    @app_commands.describe(
+        query="Currently does not support soundcloud playlists"
+    )
     @app_commands.guild_only()
     async def play(self, interaction: Interaction, query: str):
         """
@@ -140,13 +155,15 @@ class MikuMusicCommands(commands.Cog):
         result = await audio_resolver.get_song_info(query)
         if not result:
             await reply(
-                interaction, embed=text_only_embed(f"Error trying to play {query}")
+                interaction,
+                embed=text_only_embed(f"Error trying to play {query}"),
             )
             return None
 
         if not isinstance(interaction.channel, TextChannel):
             await reply(
-                interaction, embed=text_only_embed("Can only be used in text channel!")
+                interaction,
+                embed=text_only_embed("Can only be used in text channel!"),
             )
             return None
         gp_con = self.guildstate_con_dict[guild_id]
@@ -221,7 +238,9 @@ class MikuMusicCommands(commands.Cog):
     @app_commands.command(name="remove", description="Remove song from queue")
     @app_commands.describe(index="Must be a valid number to remove")
     @app_commands.guild_only()
-    async def removeFromQueue(self, interaction: Interaction, index: int) -> None:
+    async def removeFromQueue(
+        self, interaction: Interaction, index: int
+    ) -> None:
         """
         Usage /remove [index] Removes song at index from queue
         """
@@ -232,7 +251,9 @@ class MikuMusicCommands(commands.Cog):
         await gp_con.add_event(gp_con.remove_from_queue, interaction, index)
         return None
 
-    @app_commands.command(name="stop", description="Disconnects bot from voice channel")
+    @app_commands.command(
+        name="stop", description="Disconnects bot from voice channel"
+    )
     @app_commands.guild_only()
     async def stop(self, interaction: Interaction) -> None:
         """
@@ -276,7 +297,9 @@ class MikuMusicCommands(commands.Cog):
         await interaction.response.defer()
         gp_con = self.guildstate_con_dict[guild_id]
         await gp_con.add_event(gp_con.change_volume, volume)
-        await reply(interaction, embed=text_only_embed(f"Set volume to: {volume}"))
+        await reply(
+            interaction, embed=text_only_embed(f"Set volume to: {volume}")
+        )
         return None
 
     @app_commands.command(name="night-core", description="Toggle night-core")
@@ -297,12 +320,16 @@ class MikuMusicCommands(commands.Cog):
         await gp_con.add_event(gp_con.nightcore, interaction)
         return None
 
-    @app_commands.command(name="bass-boost", description="Set bass of song to value")
+    @app_commands.command(
+        name="bass-boost", description="Set bass of song to value"
+    )
     @app_commands.describe(
-        effect_strength="Warning most values over 20 will distort sound(default value is 0)"
+        effect_strength="Warning most values over 20 will distort sound(default value is 0)",  # noqa: E501
     )
     @app_commands.guild_only()
-    async def bass_boost(self, interaction: Interaction, effect_strength: float):
+    async def bass_boost(
+        self, interaction: Interaction, effect_strength: float
+    ):
         """
         Usage /bass-boost [float]
         """

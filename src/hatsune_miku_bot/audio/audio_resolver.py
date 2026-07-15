@@ -1,27 +1,29 @@
-from typing import Any
-import re
-import random
-import time
+import asyncio
+import base64
+import logging
 import os
+import random
+import re
+import time
+from typing import Any
+
+import aiohttp
+from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, PagedList
-from hatsune_miku_bot.botextras.constants import (
-    YDL_OPTS,
+
+from hatsune_miku_bot.audio.song_playlist_classes import Playlist, Song
+from hatsune_miku_bot.bot_config.constants import (
+    AUDIO_OPTS,
     SP_ALBUM_LINK,
     SP_ALBUM_METADATA,
     SP_ALBUM_SONG_METADATA,
-    SP_TRACK_LINK,
     SP_PLAYLIST_LINK,
     SP_PLAYLIST_METADATA,
     SP_PLAYLIST_SONG_METADATA,
-    AUDIO_OPTS,
+    SP_TRACK_LINK,
     SPOTIFY_SEARCH_OPTS,
+    YDL_OPTS,
 )
-from yt_dlp import YoutubeDL
-import asyncio
-import logging
-import aiohttp
-import base64
-from hatsune_miku_bot.audio_utils.audio_class import Song, Playlist
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,8 @@ class AudioInfoResolver:
             return None
         if self.token and time.time() < self.token_expiry:
             logger.debug(
-                "Token already cached, token expiry at %d", int(self.token_expiry)
+                "Token already cached, token expiry at %d",
+                int(self.token_expiry),
             )
             return None
         if max_attempts <= 0:
@@ -67,7 +70,7 @@ class AudioInfoResolver:
                         "Token reponse was of type %s not dict",
                         type(token_response),
                     )
-                # No 'get' used here so fail fast, means json structure has changed
+                # No 'get' used here so fail fast, means json structure has changed  # noqa: E501
                 # and needs to be updated
                 self.token = token_response["access_token"]
                 self.token_expiry = time.time() + (
@@ -86,7 +89,7 @@ class AudioInfoResolver:
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             if max_attempts > 1:
                 logger.warning(
-                    "Spotify token request failed, retrying... (%d attempts left): %s",
+                    "Spotify token request failed, retrying... (%d attempts left): %s",  # noqa: E501
                     max_attempts - 1,
                     e,
                 )
@@ -109,7 +112,9 @@ class AudioInfoResolver:
             return None
         headers = {"Authorization": f"Bearer {self.token}"}
         try:
-            async with self.client.get(link, headers=headers, params=params) as res:
+            async with self.client.get(
+                link, headers=headers, params=params
+            ) as res:
                 res.raise_for_status()
                 return await res.json()
         except aiohttp.ClientResponseError as e:
@@ -118,37 +123,47 @@ class AudioInfoResolver:
                 logger.info("%s retrying...", e.status)
                 # One second sleep time should be fine for now
                 await asyncio.sleep(1)
-                return await self.spotify_get_request(link, params, max_attempts - 1)
+                return await self.spotify_get_request(
+                    link, params, max_attempts - 1
+                )
             logger.error("%s: %s", e.status, e.message)
             return None
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             if max_attempts > 1:
                 logger.warning(
-                    "Spotify get request failed for %s, retrying... (%d attempts left): %s",
+                    "Spotify get request failed for %s, retrying... (%d attempts left): %s",  # noqa: E501
                     link,
                     max_attempts - 1,
                     e,
                 )
                 await asyncio.sleep(1)
-                return await self.spotify_get_request(link, params, max_attempts - 1)
+                return await self.spotify_get_request(
+                    link, params, max_attempts - 1
+                )
             logger.error("Spotify get request failed for %s: %s", link, e)
             return None
 
-    async def get_spotify_info(self, path_type: str, id: str) -> Playlist | Song | None:
+    async def get_spotify_info(
+        self, path_type: str, id: str
+    ) -> Playlist | Song | None:
         if "album/" in path_type:
             container_metadata = await self.spotify_get_request(
                 SP_ALBUM_LINK + id,
                 params=SP_ALBUM_METADATA,
             )
             if not container_metadata:
-                logger.warning("Failed to get metadata response back for %s[Album]", id)
+                logger.warning(
+                    "Failed to get metadata response back for %s[Album]", id
+                )
                 return None
             song_information = await self.spotify_get_request(
                 SP_ALBUM_LINK + id + "/tracks",
                 params=SP_ALBUM_SONG_METADATA,
             )
             if not song_information:
-                logger.warning("Failed to get song information back for %s[Album]", id)
+                logger.warning(
+                    "Failed to get song information back for %s[Album]", id
+                )
                 return None
             return Playlist.from_spotify(
                 path_type,
@@ -219,7 +234,7 @@ class AudioInfoResolver:
         #                 logger.error("Song information empty: %s", url)
         #                 return None
         #         logger.error(
-        #             "Regex failed for soundcloud info, Formats: %s Title: %s", formats, url
+        #             "Regex failed for soundcloud info, Formats: %s Title: %s", formats, url  # noqa: E501
         #         )
         #         return None
         # except DownloadError as e:
@@ -232,8 +247,6 @@ class AudioInfoResolver:
         YoutubeDL uses blocking calls use to_thread
         Returns a Song with the greatest view count
         """
-        # REMOVE THIS COMMENT AFTER REVIEW
-        # Changed search function to use ytsearch
         try:
             with YoutubeDL(params=YDL_OPTS) as ydl:
                 result = ydl.extract_info(
@@ -267,9 +280,6 @@ class AudioInfoResolver:
                 if isinstance(entries, PagedList):
                     logger.debug("YDL returned page list")
                     return None
-                # I think if entries is blank its a direct link
-                # and otherwise its a playlist
-                # TODO: test this
                 if not entries:
                     return Song.from_yt_dlp(result)
                 else:
@@ -291,7 +301,9 @@ class AudioInfoResolver:
         url_domain = grouped_url.group(1)
         url_path = grouped_url.group(2)
         if "spotify" in url_domain:
-            re_groups = re.match(r"(track/|playlist/|album/)(\w+)(?:\?|$)", url_path)
+            re_groups = re.match(
+                r"(track/|playlist/|album/)(\w+)(?:\?|$)", url_path
+            )
             if re_groups:
                 id = re_groups.group(2)
                 return await self.get_spotify_info(url, id)

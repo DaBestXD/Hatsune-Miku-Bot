@@ -1,17 +1,19 @@
-import time
-import random
-from dataclasses import dataclass, field
-from hatsune_miku_bot.audio_utils.bot_audio_functions import build_audio
-import io
-from hatsune_miku_bot.audio_utils.audio_handler import get_audio_source
-from hatsune_miku_bot.botextras.bot_funcs_ext import reply, text_only_embed
-from discord import Interaction, VoiceClient, TextChannel, PCMVolumeTransformer
-from hatsune_miku_bot.audio_utils.audio_class import Song, Playlist
-from typing import Any, ParamSpec, Literal
-from collections.abc import Callable, Coroutine
 import asyncio
+import io
 import logging
+import random
+import time
+from collections.abc import Callable, Coroutine
+from dataclasses import dataclass, field
+from typing import Any, Literal, ParamSpec
+
+from discord import Interaction, PCMVolumeTransformer, TextChannel, VoiceClient
 from discord.ext import commands
+
+from hatsune_miku_bot.audio.audio_resolver import get_audio_source
+from hatsune_miku_bot.audio.playback_helpers import build_audio
+from hatsune_miku_bot.audio.song_playlist_classes import Playlist, Song
+from hatsune_miku_bot.utils.discord_helpers import reply, text_only_embed
 
 logger = logging.getLogger(__name__)
 P = ParamSpec("P")
@@ -104,7 +106,10 @@ class GuildStateController:
 
     # TODO: DOCSTRING
     async def queue_songs(
-        self, interaction: Interaction, item_to_add: Song | Playlist, vc: VoiceClient
+        self,
+        interaction: Interaction,
+        item_to_add: Song | Playlist,
+        vc: VoiceClient,
     ) -> None:
         self.state.vc = vc
         if isinstance(interaction.channel, TextChannel):
@@ -116,9 +121,12 @@ class GuildStateController:
             await reply(interaction, embed=item_to_add.return_embed())
         else:
             self.state.songs.append(item_to_add)
-            next_song = self.state.songs[1] if len(self.state.songs) >= 2 else None
+            next_song = (
+                self.state.songs[1] if len(self.state.songs) >= 2 else None
+            )
             await reply(
-                interaction, embed=item_to_add.return_embed(next_song, queued=True)
+                interaction,
+                embed=item_to_add.return_embed(next_song, queued=True),
             )
         await self.add_event(self.begin_song_cache)
 
@@ -127,7 +135,9 @@ class GuildStateController:
         if not self.state.vc:
             logger.warning("Attempted to play song while not in vc")
             return None
-        self.state.active_song = self.state.songs[0] if self.state.songs else None
+        self.state.active_song = (
+            self.state.songs[0] if self.state.songs else None
+        )
         if not self.state.active_song:
             logger.warning("Attempted to play song with no active song set")
             return None
@@ -141,16 +151,22 @@ class GuildStateController:
             if source:
                 song = self.state.active_song
                 logger.debug("Caching %s[%s]", song.title, song.webpage_url)
-                self.state.song_cache[self.state.active_song.webpage_url] = source
+                self.state.song_cache[self.state.active_song.webpage_url] = (
+                    source
+                )
         if not source:
             # Error branch if source cannot be found
-            logger.warning("No source found for %s", self.state.active_song.title)
+            logger.warning(
+                "No source found for %s", self.state.active_song.title
+            )
             if self.state.text_channel:
                 await self.state.text_channel.send(
                     embed=self.state.songs[0].return_err_embed()
                 )
             self.state.songs.pop(0)
-            self.state.active_song = self.state.songs[0] if self.state.songs else None
+            self.state.active_song = (
+                self.state.songs[0] if self.state.songs else None
+            )
             if self.state.active_song:
                 await self.add_event(self.begin_playback)
             elif self.state.text_channel:
@@ -182,7 +198,9 @@ class GuildStateController:
             self.state.song_mods.is_song_modified = False
             return None
         if self.state.text_channel:
-            next_song = self.state.songs[1] if len(self.state.songs) >= 2 else None
+            next_song = (
+                self.state.songs[1] if len(self.state.songs) >= 2 else None
+            )
             await self.state.text_channel.send(
                 embed=self.state.active_song.return_embed(next_song)
             )
@@ -192,7 +210,9 @@ class GuildStateController:
             )
         await self.add_event(self.begin_playback)
 
-    def after_callback(self, error: Exception | None, stderr_buff: io.BytesIO) -> None:
+    def after_callback(
+        self, error: Exception | None, stderr_buff: io.BytesIO
+    ) -> None:
         if error:
             logger.error("%s", error)
         ffmpeg_error = stderr_buff.getvalue().decode("utf-8", errors="ignore")
@@ -210,14 +230,19 @@ class GuildStateController:
             self.state.song_mods.position_offset_s = 0
         if not self.state.song_mods.song_loop and self.state.songs:
             self.state.songs.pop(0)
-        self.state.active_song = self.state.songs[0] if self.state.songs else None
+        self.state.active_song = (
+            self.state.songs[0] if self.state.songs else None
+        )
         if not self.state.active_song:
             if not self.state.text_channel:
                 logger.warning(
-                    "Text channel was none for %s", self.finished_playback.__name__
+                    "Text channel was none for %s",
+                    self.finished_playback.__name__,
                 )
                 return None
-            await self.state.text_channel.send(embed=text_only_embed("Queue empty🐱"))
+            await self.state.text_channel.send(
+                embed=text_only_embed("Queue empty🐱")
+            )
             return None
         else:
             await self.add_event(self.begin_playback)
@@ -289,7 +314,7 @@ class GuildStateController:
             await reply(
                 interaction,
                 embed=text_only_embed(
-                    f"Removing {self.state.songs[idx_to_remove].title} from the queue!"
+                    f"Removing {self.state.songs[idx_to_remove].title} from the queue!"  # noqa: E501
                 ),
             )
             self.state.songs.pop(idx_to_remove)
@@ -312,7 +337,9 @@ class GuildStateController:
         await reply(interaction, embed=text_only_embed(embed_text))
 
     async def nightcore(self, interaction: Interaction) -> None:
-        self.state.song_mods.position_offset_s = self.state.song_mods.interrupt_time()
+        self.state.song_mods.position_offset_s = (
+            self.state.song_mods.interrupt_time()
+        )
         if self.state.song_mods.is_nightcore():
             self.state.song_mods.song_pitch = None
             text = "Nightcore off!😿"
@@ -322,16 +349,28 @@ class GuildStateController:
         await self._modify_song_playback(interaction, text)
         return None
 
-    async def set_bass(self, interaction: Interaction, effect_strength: float) -> None:
-        self.state.song_mods.position_offset_s = self.state.song_mods.interrupt_time()
+    async def set_bass(
+        self, interaction: Interaction, effect_strength: float
+    ) -> None:
+        self.state.song_mods.position_offset_s = (
+            self.state.song_mods.interrupt_time()
+        )
         self.state.song_mods.song_bass = effect_strength
-        await self._modify_song_playback(interaction, f"Bass set to {effect_strength}")
+        await self._modify_song_playback(
+            interaction, f"Bass set to {effect_strength}"
+        )
         return None
 
-    async def set_speed(self, interaction: Interaction, effect_strength: float) -> None:
-        self.state.song_mods.position_offset_s = self.state.song_mods.interrupt_time()
+    async def set_speed(
+        self, interaction: Interaction, effect_strength: float
+    ) -> None:
+        self.state.song_mods.position_offset_s = (
+            self.state.song_mods.interrupt_time()
+        )
         self.state.song_mods.song_speed = effect_strength
-        await self._modify_song_playback(interaction, f"Speed set to {effect_strength}")
+        await self._modify_song_playback(
+            interaction, f"Speed set to {effect_strength}"
+        )
         return None
 
 
@@ -450,16 +489,12 @@ def _song_mod_to_ffmpeg_str(
     Build an str ready for ffmpeg song mod options
     """
     if mod_type == "pitch":
-        return f",aresample=48000,asetrate=48000*{effect_strength},aresample=48000"
+        return (
+            f",aresample=48000,asetrate=48000*{effect_strength},aresample=48000"
+        )
     if mod_type == "speed":
         return f",atempo={effect_strength}"
     if mod_type == "bass":
         return f",bass=g={effect_strength}"
     if mod_type == "off":
         return ""
-
-
-# Step 1 song plays monotonic timestamp
-#
-# Step 2 song is modified(speedwise) get effective_playback_rate * (start time - monotonic timestamp)
-# Seek_time = step 2

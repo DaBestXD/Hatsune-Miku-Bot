@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 import os
+from typing import Any, cast
+
 import discord
-from typing import cast, Any
 from dotenv import load_dotenv
-from hatsune_miku_bot.botextras.config import ENV_PATH, PROJECT_ROOT
+
+from hatsune_miku_bot.bot_config.paths import ENV_PATH, PROJECT_ROOT
 
 load_dotenv(dotenv_path=ENV_PATH)
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -14,7 +17,7 @@ if GUILD_ID:
     GUILD_OBJECT = discord.Object(id=int(GUILD_ID))
 CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
-# Any cast to make the type checker shut up cause importing _Params doesnt work😾
+# Any cast to make the type checker shut up cause importing _Params doesnt work😾  # noqa: E501
 # Something something private modules something I don't get it yet 🐱
 DB_PATH = PROJECT_ROOT / "data" / "status.db"
 YDL_OPTS = cast(
@@ -25,7 +28,9 @@ YDL_OPTS = cast(
         "extract_flat": "in_playlist",
         "remote_components": ["ejs:github"],
         "quiet": True,
-        "extractor_args": {"youtube": {"skip": ["hls", "dash", "translated_subs"]}},
+        "extractor_args": {
+            "youtube": {"skip": ["hls", "dash", "translated_subs"]}
+        },
     },
 )
 AUDIO_OPTS = cast(
@@ -55,17 +60,17 @@ SPOTIFY_SEARCH_OPTS = cast(
 FFMPEG_OPTS = cast(
     Any,
     {
-        "before_options": "-nostdin -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+        "before_options": "-nostdin -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",  # noqa: E501
         "options": "-vn -af loudnorm=I=-12:TP=-1.0:LRA=7",
     },
 )
 SP_PLAYLIST_SONG_METADATA = {
     "market": "US",
-    "fields": "items(track(name,duration_ms,artists(name),external_urls(spotify),album(images(url)))),next,total",
+    "fields": "items(track(name,duration_ms,artists(name),external_urls(spotify),album(images(url)))),next,total",  # noqa: E501
 }
 SP_ALBUM_SONG_METADATA = {
     "market": "US",
-    "fields": "items(name,duration_ms,artists(name),external_urls(spotify)),next,total",
+    "fields": "items(name,duration_ms,artists(name),external_urls(spotify)),next,total",  # noqa: E501
 }
 SP_PLAYLIST_METADATA = {
     "market": "US",

@@ -1,6 +1,8 @@
+from datetime import datetime, timedelta, timezone
+
 import aiosqlite
-from datetime import datetime, timezone, timedelta
-from hatsune_miku_bot.botextras.config import PROJECT_ROOT
+
+from hatsune_miku_bot.bot_config.paths import PROJECT_ROOT
 
 DB_PATH = PROJECT_ROOT / "data" / "status.db"
 
@@ -22,7 +24,9 @@ async def get_status() -> dict[str, str]:
 async def uptime_percent_since(hours: int) -> float:
     async with aiosqlite.connect(DB_PATH) as con:
         con.row_factory = aiosqlite.Row
-        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(hours=hours)
+        ).isoformat()
         query = """
             SELECT discord_connection FROM snapshots
             WHERE snapshot_time >= :cutoff AND uptime_seconds > 0

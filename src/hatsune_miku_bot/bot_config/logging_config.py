@@ -1,6 +1,7 @@
 import logging
 import sys
-from hatsune_miku_bot.botextras.config import PROJECT_ROOT
+
+from hatsune_miku_bot.bot_config.paths import PROJECT_ROOT
 
 
 class ColorFormatter(logging.Formatter):

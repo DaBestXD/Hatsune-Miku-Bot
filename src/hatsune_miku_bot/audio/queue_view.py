@@ -1,16 +1,19 @@
 from __future__ import annotations
+
+from typing import TYPE_CHECKING, Optional
+
 import discord
-from typing import Optional, TYPE_CHECKING
 from discord import Color, Interaction, VoiceClient, ui
-from hatsune_miku_bot.audio_utils.audio_class import Playlist
-from hatsune_miku_bot.audio_utils.bot_audio_functions import join_vc
-from hatsune_miku_bot.audio_utils.guildstate_controller import (
+
+from hatsune_miku_bot.audio.audio_resolver import Playlist
+from hatsune_miku_bot.audio.guild_state_controller import (
     GuildStateController,
 )
-from hatsune_miku_bot.botextras.constants import DIS_BOT_THUMBNAIL, INVIS_CHAR
+from hatsune_miku_bot.audio.playback_helpers import join_vc
+from hatsune_miku_bot.bot_config.constants import DIS_BOT_THUMBNAIL, INVIS_CHAR
 
 if TYPE_CHECKING:
-    from hatsune_miku_bot.cogs.musicplayer import MikuMusicCommands
+    from hatsune_miku_bot.cogs.music import MikuMusicCommands
 
 
 # TODO: Look to refactor this later
@@ -25,7 +28,9 @@ class QueueEmbed:
     def update_embed(self, gp_con: GuildStateController):
         queued_songs = gp_con.state.songs[1:]
         queued_song_count = len(queued_songs)
-        self.max_pages = ((queued_song_count - 1) // 10) if queued_song_count else 0
+        self.max_pages = (
+            ((queued_song_count - 1) // 10) if queued_song_count else 0
+        )
         if self.page_number > self.max_pages:
             self.page_number = self.max_pages
         if self.page_number < 0:
@@ -34,7 +39,9 @@ class QueueEmbed:
             truncated_title: str = active_song.title[:30]
             if len(truncated_title) >= 30:
                 truncated_title += "..."
-            truncated_title += f" ({gp_con.state.active_song.formatted_duration})"
+            truncated_title += (
+                f" ({gp_con.state.active_song.formatted_duration})"
+            )
             if not self.embed:
                 self.embed = discord.Embed(
                     title=truncated_title,
@@ -52,11 +59,13 @@ class QueueEmbed:
             body_text: list[str] = []
             if queued_songs:
                 for idx, s in enumerate(page_slice, start=start + 1):
-                    safe_title = s.title.replace("[", "【").replace("]", "】")[:25]
+                    safe_title = s.title.replace("[", "【").replace("]", "】")[
+                        :25
+                    ]
                     if len(safe_title) >= 25:
                         safe_title += "..."
                     body_text.append(
-                        f"{idx}. [{safe_title}]({s.webpage_url}) `{s.formatted_duration}`"
+                        f"{idx}. [{safe_title}]({s.webpage_url}) `{s.formatted_duration}`"  # noqa: E501
                     )
                 self.embed.add_field(
                     name="Song queue:", value="\n".join(body_text), inline=False
@@ -72,7 +81,7 @@ class QueueEmbed:
             )
             self.embed.add_field(
                 name=INVIS_CHAR,
-                value=f"Nightcore:`{not gp_con.state.song_mods.is_nightcore()}`\nSongs:`{len(playlist.songs) - 1}`",
+                value=f"Nightcore:`{not gp_con.state.song_mods.is_nightcore()}`\nSongs:`{len(playlist.songs) - 1}`",  # noqa: E501
             )
             self.embed.add_field(
                 name=INVIS_CHAR,
@@ -110,7 +119,9 @@ class QueueView(ui.View):
     # async def song_select(self, interaction: Interaction):
     #     pass
 
-    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.secondary, disabled=True)
+    @discord.ui.button(
+        emoji="⬅️", style=discord.ButtonStyle.secondary, disabled=True
+    )
     async def page_back(self, interaction: Interaction, button: ui.Button):
         if not (guild_id := interaction.guild_id):
             return None
@@ -119,9 +130,13 @@ class QueueView(ui.View):
         if self.queueEmbed.page_number <= 0:
             button.disabled = True
         self.page_right.disabled = False
-        await interaction.response.edit_message(embed=self.queueEmbed.embed, view=self)
+        await interaction.response.edit_message(
+            embed=self.queueEmbed.embed, view=self
+        )
 
-    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.secondary, disabled=True)
+    @discord.ui.button(
+        emoji="➡️", style=discord.ButtonStyle.secondary, disabled=True
+    )
     async def page_right(self, interaction: Interaction, button: ui.Button):
         if not (guild_id := interaction.guild_id):
             return None
@@ -130,9 +145,13 @@ class QueueView(ui.View):
         if self.queueEmbed.page_number >= self.queueEmbed.max_pages:
             button.disabled = True
         self.page_back.disabled = False
-        await interaction.response.edit_message(embed=self.queueEmbed.embed, view=self)
+        await interaction.response.edit_message(
+            embed=self.queueEmbed.embed, view=self
+        )
 
-    @discord.ui.button(emoji="🔀", style=discord.ButtonStyle.secondary, disabled=False)
+    @discord.ui.button(
+        emoji="🔀", style=discord.ButtonStyle.secondary, disabled=False
+    )
     async def button_shuffle(self, interaction: Interaction, button: ui.Button):
         if not (guild_id := interaction.guild_id):
             return None
@@ -149,7 +168,9 @@ class QueueView(ui.View):
         style=discord.ButtonStyle.danger,
         disabled=False,
     )
-    async def button_night_core(self, interaction: Interaction, button: ui.Button):
+    async def button_night_core(
+        self, interaction: Interaction, button: ui.Button
+    ):
         if not (guild_id := interaction.guild_id):
             return None
         await interaction.response.defer()
@@ -163,7 +184,9 @@ class QueueView(ui.View):
                 await self.message.edit(embed=self.queueEmbed.embed)
         return None
 
-    @discord.ui.button(label="STOP", style=discord.ButtonStyle.success, disabled=False)
+    @discord.ui.button(
+        label="STOP", style=discord.ButtonStyle.success, disabled=False
+    )
     async def button_stop(self, interaction: Interaction, button: ui.Button):
         if not (guild_id := interaction.guild_id):
             return None

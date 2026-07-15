@@ -1,14 +1,21 @@
 from __future__ import annotations
+
 import logging
+from datetime import datetime, timezone
+
 import discord
 from discord import Interaction
 from discord.app_commands import CheckFailure
 from discord.app_commands.errors import AppCommandError
 from discord.ext import commands
-from hatsune_miku_bot.botextras.constants import GUILD_ID, USER_ID, DISCORD_TOKEN
-from hatsune_miku_bot.botextras.bot_funcs_ext import reply, text_only_embed
+
+from hatsune_miku_bot.bot_config.constants import (
+    DISCORD_TOKEN,
+    GUILD_ID,
+    USER_ID,
+)
 from hatsune_miku_bot.db_stuff.db_logic import insert_event, utc_now_dt
-from datetime import datetime, timezone
+from hatsune_miku_bot.utils.discord_helpers import reply, text_only_embed
 
 
 class Bot(commands.Bot):
@@ -21,7 +28,10 @@ class Bot(commands.Bot):
         intents.message_content = True
         intents.voice_states = True
         super().__init__(
-            command_prefix="!", intents=intents, owner_id=owner_id, help_command=None
+            command_prefix="!",
+            intents=intents,
+            owner_id=owner_id,
+            help_command=None,
         )
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
@@ -53,10 +63,10 @@ class Bot(commands.Bot):
             )
 
     async def setup_hook(self) -> None:
-        await self.load_extension("hatsune_miku_bot.cogs.musicplayer")
+        await self.load_extension("hatsune_miku_bot.cogs.music")
         if self.debugger_on and USER_ID and GUILD_ID:
-            await self.load_extension("hatsune_miku_bot.cogs.debugger")
-        await self.load_extension("hatsune_miku_bot.cogs.utilcommands")
+            await self.load_extension("hatsune_miku_bot.cogs.debug")
+        await self.load_extension("hatsune_miku_bot.cogs.utility")
         for ext in self.extensions:
             self.logger.info("Loaded %s", ext)
         self.tree.on_error = self.on_app_command_error
@@ -65,12 +75,16 @@ class Bot(commands.Bot):
 
     async def on_resumed(self) -> None:
         self.discord_connected = True
-        await insert_event("bot_resume", utc_now_dt().isoformat(), "Bot has resumed")
+        await insert_event(
+            "bot_resume", utc_now_dt().isoformat(), "Bot has resumed"
+        )
         return None
 
     async def on_shard_disconnect(self, shard_id: int) -> None:
         await insert_event(
-            "shard_disconnect", utc_now_dt().isoformat(), f"{shard_id} disconnected"
+            "shard_disconnect",
+            utc_now_dt().isoformat(),
+            f"{shard_id} disconnected",
         )
         return None
 
@@ -84,7 +98,9 @@ class Bot(commands.Bot):
         self.discord_connected = True
         if self.user:
             for g in self.guilds:
-                self.logger.info("Logged in as %s on %s[%d]", self.user, g.name, g.id)
+                self.logger.info(
+                    "Logged in as %s on %s[%d]", self.user, g.name, g.id
+                )
                 await insert_event(
                     "bot_ready",
                     utc_now_dt().isoformat(),
@@ -93,7 +109,9 @@ class Bot(commands.Bot):
         if not self.synced:
             for g in self.guilds:
                 await self.tree.sync(guild=g)
-                self.logger.info("Synced guild command set for %s[%d]", g.name, g.id)
+                self.logger.info(
+                    "Synced guild command set for %s[%d]", g.name, g.id
+                )
             self.synced = True
         self.logger.info("Ready to go!😼")
         return None
@@ -101,7 +119,9 @@ class Bot(commands.Bot):
     async def on_disconnect(self) -> None:
         self.discord_connected = False
         await insert_event(
-            "discord_disconnect", utc_now_dt().isoformat(), "Bot has disconnected"
+            "discord_disconnect",
+            utc_now_dt().isoformat(),
+            "Bot has disconnected",
         )
         return None
 
@@ -115,7 +135,9 @@ class Bot(commands.Bot):
                 ephemeral=True,
             )
         else:
-            await reply(interaction, embed=text_only_embed("Error has occured!"))
+            await reply(
+                interaction, embed=text_only_embed("Error has occured!")
+            )
             await insert_event(
                 "app_command_error", utc_now_dt().isoformat(), str(error)
             )
