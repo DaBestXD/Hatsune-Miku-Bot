@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from hatsune_miku_bot.cogs.musicplayer import MikuMusicCommands
 
 
+# TODO: Look to refactor this later
 class QueueEmbed:
     def __init__(self, gp_con: GuildStateController) -> None:
         self.page_number = 0
@@ -64,34 +65,18 @@ class QueueEmbed:
                 self.embed.add_field(
                     name="Song queue:", value="Queue empty!", inline=False
                 )
-            # TODO:
-            # human_night = "Enabled" if gp_con.state.nightcore else "Disabled"
-            # human_loop = "Enabled" if gp_con.state.song_loop else "Disabled"
-            # human_speed = (
-            #     "Default"
-            #     if not gp_con.state.song_speed
-            #     else gp_con.state.song_speed.replace(",atempo=", "")
-            # )
-            # human_bass = (
-            #     "Default"
-            #     if not (b := gp_con.state.song_bass.replace(",bass=g=", ""))
-            #     else b
-            # )
-            human_loop = "TODO"
-            human_night = "TODO"
-            human_speed = "TODO"
-            human_bass = "TODO"
             playlist = Playlist(gp_con.state.songs)
             self.embed.add_field(
                 name="Queue details:",
-                value=f"Looping:`{human_loop}`\nDuration:`{playlist.formatted_duration}`",
+                value=f"Looping:`{gp_con.state.song_mods.song_loop}`\nDuration:`{playlist.formatted_duration}`",
             )
             self.embed.add_field(
                 name=INVIS_CHAR,
-                value=f"Nightcore:`{human_night}`\nSongs:`{len(playlist.songs) - 1}`",
+                value=f"Nightcore:`{gp_con.state.song_mods.is_nightcore()}`\nSongs:`{len(playlist.songs) - 1}`",
             )
             self.embed.add_field(
-                name=INVIS_CHAR, value=f"Speed:`{human_speed}`\nBass:`{human_bass}`"
+                name=INVIS_CHAR,
+                value=f"Speed:`{gp_con.state.song_mods.song_speed}`\nBass:`{gp_con.state.song_mods.song_bass}`",
             )
             self.embed.set_footer(
                 text=f"Page: {self.page_number + 1} of {self.max_pages + 1}"
@@ -120,6 +105,7 @@ class QueueView(ui.View):
         self.miku = miku
         self.message: discord.Message | None = None
 
+    # TODO: song selection
     # @discord.ui.select()
     # async def song_select(self, interaction: Interaction):
     #     pass
@@ -152,10 +138,7 @@ class QueueView(ui.View):
             return None
         await interaction.response.defer()
         gp_con = self.miku.guildstate_con_dict[guild_id]
-        # TODO:
-        # done = asyncio.get_running_loop().create_future()
-        # await gp_con.add_event(Shuffle(interaction, done))
-        # await done
+        await gp_con.add_event(gp_con.shuffle, interaction)
         self.queueEmbed.update_embed(gp_con)
         if self.message:
             await self.message.edit(embed=self.queueEmbed.embed)
@@ -174,10 +157,7 @@ class QueueView(ui.View):
             vc, VoiceClient
         ):
             gp_con = self.miku.guildstate_con_dict[guild_id]
-            # TODO:
-            # done = asyncio.get_running_loop().create_future()
-            # await gp_con.add_event(Nightcore(interaction, vc, done=done))
-            # await done
+            await gp_con.add_event(gp_con.nightcore, interaction)
             self.queueEmbed.update_embed(gp_con)
             if self.message:
                 await self.message.edit(embed=self.queueEmbed.embed)
@@ -194,8 +174,7 @@ class QueueView(ui.View):
                 item.disabled = True
         if self.message:
             await self.message.edit(view=self)
-        # TODO:
-        # await gp_con.add_event(StopPlayblack(interaction))
+        await gp_con.add_event(gp_con.stop_playback, interaction)
 
     async def on_timeout(self):
         if self.message:
