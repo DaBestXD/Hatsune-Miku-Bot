@@ -16,7 +16,6 @@ from hatsune_miku_bot.utils.discord_helpers import (
 )
 
 
-# TODO: fix this later
 class BotDebugger(commands.Cog):
     """
     Bot debugging commandsn
@@ -43,9 +42,7 @@ class BotDebugger(commands.Cog):
     async def cog_ext_name_autocomplete(
         self, interaction: Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        return [
-            app_commands.Choice(name=s, value=s) for s in self.bot.extensions
-        ]
+        return [app_commands.Choice(name=s, value=s) for s in self.bot.extensions]
 
     def return_commands_embed(self, cog: commands.Cog) -> discord.Embed:
         return code_block_embed(
@@ -56,57 +53,53 @@ class BotDebugger(commands.Cog):
     def return_guild_state_embed(
         self, gp_con: GuildStateController, guild_name: str
     ) -> discord.Embed:
-        state = gp_con.state
-        active_song = state.active_song.title if state.active_song else "None"
-        next_song = state.songs[1].title if len(state.songs) >= 2 else "None"
-        preview_songs = [
-            song.title for song in state.songs[:5] if isinstance(song, Song)
-        ]
-        queue_preview = (
-            "\n".join(
-                f"{idx}. {title}" for idx, title in enumerate(preview_songs)
-            )
-            or "Queue empty"
-        )
-
+        gp_con.state
         embed = discord.Embed(
             title=f"Music info for {guild_name}",
             color=discord.Color.blue(),
         )
+        next_song = gp_con.state.songs[1] if len(gp_con.state.songs) else None
         embed.add_field(
             name="Playback",
             value=(
-                f"Active: `{active_song}`\n"
+                f"Active: `{gp_con.state.active_song}`\n"
                 f"Next: `{next_song}`\n"
-                f"Loop: `{state.song_loop}`\n"
-                f"Nightcore: `{state.nightcore}`\n"
-                f"Volume: `{state.volume:.2f}`"
+                f"Loop: `{gp_con.state.song_mods.song_loop}`\n"
+                f"Nightcore: `{gp_con.state.song_mods.is_nightcore()}`\n"
+                f"Volume: `{gp_con.state.song_mods.volume}`"
             ),
             inline=False,
         )
         embed.add_field(
             name="State",
             value=(
-                f"Queued songs: `{len(state.songs)}`\n"
-                f"Cached sources: `{len(state.song_cache)}`\n"
-                f"Seek time: `{state.seek_time}`\n"
-                f"Start time: `{state.start_time}`\n"
-                f"Voice connected: `{state.vc is not None}`"
+                f"Queued songs: `{len(gp_con.state.songs)}`\n"
+                f"Cached sources: `{len(gp_con.state.song_cache)}`\n"
+                f"Seek time: `{gp_con.state.song_mods.position_offset_s}`\n"
+                f"Start time: `{gp_con.state.song_mods.start_timestamp}`\n"
+                f"Voice connected: `{gp_con.state.vc is not None}`"
             ),
             inline=False,
         )
         embed.add_field(
             name="Channels",
             value=(
-                f"Text channel: `{getattr(state.text_channel, 'name', None)}`\n"
-                f"Voice channel: `{getattr(getattr(state.vc, 'channel', None), 'name', None)}`"  # noqa: E501
+                f"Text channel: `{getattr(gp_con.state.text_channel, 'name', None)}`\n"
+                f"Voice channel: `{getattr(getattr(gp_con.state.vc, 'channel', None), 'name', None)}`"  # noqa: E501
             ),
             inline=False,
         )
         embed.add_field(
             name="Song Mods",
-            value=f"`{state.song_pitch, state.song_speed, state.song_bass}`",
+            value=f"`{gp_con.state.song_mods.song_pitch, gp_con.state.song_mods.song_speed, gp_con.state.song_mods.song_bass}`",
             inline=False,
+        )
+        preview_songs = [
+            song.title for song in gp_con.state.songs[:5] if isinstance(song, Song)
+        ]
+        queue_preview = (
+            "\n".join(f"{idx}. {title}" for idx, title in enumerate(preview_songs))
+            or "Queue empty"
         )
         embed.add_field(name="Queue Preview", value=queue_preview, inline=False)
         return embed
@@ -115,24 +108,20 @@ class BotDebugger(commands.Cog):
     @app_commands.guilds(GUILD_OBJECT)
     @app_commands.guild_only()
     @owner_command()
-    async def dump_cog_info(
-        self, interaction: Interaction, cog_class_name: str
-    ):
+    async def dump_cog_info(self, interaction: Interaction, cog_class_name: str):
         if not (ext_cog := self.bot.get_cog(cog_class_name)):
             await reply(interaction, embed=text_only_embed("🙀"))
             return None
-        if not (g_id := interaction.guild_id):
+        if not (guild_id := interaction.guild_id):
             return None
         list_embeds: list[discord.Embed] = []
         list_embeds.append(self.return_commands_embed(ext_cog))
         if isinstance(ext_cog, MikuMusicCommands):
-            gp_con = await ext_cog.return_gp_con(g_id)
+            gp_con = ext_cog.guildstate_con_dict[guild_id]
             guild_name = (
-                guild.name if (guild := self.bot.get_guild(g_id)) else str(g_id)
+                guild.name if (guild := self.bot.get_guild(guild_id)) else str(guild_id)
             )
-            list_embeds.append(
-                self.return_guild_state_embed(gp_con, guild_name)
-            )
+            list_embeds.append(self.return_guild_state_embed(gp_con, guild_name))
         for e in list_embeds:
             await reply(interaction, embed=e)
         return None
