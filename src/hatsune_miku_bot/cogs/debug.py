@@ -1,5 +1,3 @@
-import logging
-
 import discord
 from discord import Interaction, app_commands
 from discord.ext import commands
@@ -24,7 +22,6 @@ class BotDebugger(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot: commands.Bot = bot
-        self.logger = logging.getLogger(self.__class__.__name__)
 
     @app_commands.command(name="cog_reload", description="Reloads a cog")
     @app_commands.guilds(GUILD_OBJECT)
@@ -42,7 +39,9 @@ class BotDebugger(commands.Cog):
     async def cog_ext_name_autocomplete(
         self, interaction: Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        return [app_commands.Choice(name=s, value=s) for s in self.bot.extensions]
+        return [
+            app_commands.Choice(name=s, value=s) for s in self.bot.extensions
+        ]
 
     def return_commands_embed(self, cog: commands.Cog) -> discord.Embed:
         return code_block_embed(
@@ -53,7 +52,6 @@ class BotDebugger(commands.Cog):
     def return_guild_state_embed(
         self, gp_con: GuildStateController, guild_name: str
     ) -> discord.Embed:
-        gp_con.state
         embed = discord.Embed(
             title=f"Music info for {guild_name}",
             color=discord.Color.blue(),
@@ -81,24 +79,33 @@ class BotDebugger(commands.Cog):
             ),
             inline=False,
         )
+        if gp_con.state.text_channel:
+            repr_text_channel = gp_con.state.text_channel.name
+        else:
+            repr_text_channel = None
+        repr_vc = gp_con.state.vc.channel.name if gp_con.state.vc else None
         embed.add_field(
             name="Channels",
             value=(
-                f"Text channel: `{getattr(gp_con.state.text_channel, 'name', None)}`\n"
-                f"Voice channel: `{getattr(getattr(gp_con.state.vc, 'channel', None), 'name', None)}`"  # noqa: E501
+                f"Text channel: `{repr_text_channel}`\n"
+                f"Voice channel: `{repr_vc}`"
             ),
             inline=False,
         )
         embed.add_field(
             name="Song Mods",
-            value=f"`{gp_con.state.song_mods.song_pitch, gp_con.state.song_mods.song_speed, gp_con.state.song_mods.song_bass}`",
+            value=f"`{gp_con.state.song_mods.song_pitch, gp_con.state.song_mods.song_speed, gp_con.state.song_mods.song_bass}`",  # noqa: E501
             inline=False,
         )
         preview_songs = [
-            song.title for song in gp_con.state.songs[:5] if isinstance(song, Song)
+            song.title
+            for song in gp_con.state.songs[:5]
+            if isinstance(song, Song)
         ]
         queue_preview = (
-            "\n".join(f"{idx}. {title}" for idx, title in enumerate(preview_songs))
+            "\n".join(
+                f"{idx}. {title}" for idx, title in enumerate(preview_songs)
+            )
             or "Queue empty"
         )
         embed.add_field(name="Queue Preview", value=queue_preview, inline=False)
@@ -108,7 +115,9 @@ class BotDebugger(commands.Cog):
     @app_commands.guilds(GUILD_OBJECT)
     @app_commands.guild_only()
     @owner_command()
-    async def dump_cog_info(self, interaction: Interaction, cog_class_name: str):
+    async def dump_cog_info(
+        self, interaction: Interaction, cog_class_name: str
+    ):
         if not (ext_cog := self.bot.get_cog(cog_class_name)):
             await reply(interaction, embed=text_only_embed("🙀"))
             return None
@@ -119,9 +128,13 @@ class BotDebugger(commands.Cog):
         if isinstance(ext_cog, MikuMusicCommands):
             gp_con = ext_cog.guildstate_con_dict[guild_id]
             guild_name = (
-                guild.name if (guild := self.bot.get_guild(guild_id)) else str(guild_id)
+                guild.name
+                if (guild := self.bot.get_guild(guild_id))
+                else str(guild_id)
             )
-            list_embeds.append(self.return_guild_state_embed(gp_con, guild_name))
+            list_embeds.append(
+                self.return_guild_state_embed(gp_con, guild_name)
+            )
         for e in list_embeds:
             await reply(interaction, embed=e)
         return None

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import discord
 from discord import Interaction
@@ -17,13 +17,14 @@ from hatsune_miku_bot.bot_config.constants import (
 from hatsune_miku_bot.db_stuff.db_logic import insert_event, utc_now_dt
 from hatsune_miku_bot.utils.discord_helpers import reply, text_only_embed
 
+logger = logging.getLogger(__name__)
+
 
 class Bot(commands.Bot):
     def __init__(self, owner_id: int | None, debugger_on: bool = False) -> None:
-        self.logger = logging.getLogger(self.__class__.__name__)
         self.synced: bool = False
         self.debugger_on = debugger_on
-        self.process_start = datetime.now(timezone.utc)
+        self.process_start = datetime.now(UTC)
         intents = discord.Intents.default()
         intents.message_content = True
         intents.voice_states = True
@@ -35,18 +36,18 @@ class Bot(commands.Bot):
         )
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
-        self.logger.info("Joined: %s", guild.name)
+        logger.info("Joined: %s", guild.name)
         try:
             await self.tree.sync(guild=guild)
-            self.logger.info(
+            logger.info(
                 "Synced guild-scoped commands to: %s[%d]", guild.name, guild.id
             )
         except discord.Forbidden:
-            self.logger.error(
+            logger.error(
                 "No permission to sync in guild %s, (%d)", guild.name, guild.id
             )
         except discord.HTTPException as e:
-            self.logger.error(
+            logger.error(
                 "HTTP sync failure guild: %s, (%d) [status=%s code=%s]",
                 guild.name,
                 guild.id,
@@ -54,11 +55,11 @@ class Bot(commands.Bot):
                 e.code,
             )
         except discord.DiscordException:
-            self.logger.error(
+            logger.error(
                 "Discord sync error guild: %s, (%d)", guild.name, guild.id
             )
         except Exception:
-            self.logger.error(
+            logger.error(
                 "Unexpected sync error guild: %s, (%d)", guild.name, guild.id
             )
 
@@ -68,8 +69,17 @@ class Bot(commands.Bot):
             await self.load_extension("hatsune_miku_bot.cogs.debug")
         await self.load_extension("hatsune_miku_bot.cogs.utility")
         for ext in self.extensions:
-            self.logger.info("Loaded %s", ext)
-        self.tree.on_error = self.on_app_command_error
+            logger.info("Loaded %s", ext)
+
+        @self.tree.error
+        async def handle_app_command_error(
+            interaction: Interaction,
+            error: AppCommandError,
+            /,
+        ) -> None:
+            await self.on_app_command_error(interaction, error)
+            return None
+
         await self.tree.sync()
         return None
 
@@ -98,7 +108,7 @@ class Bot(commands.Bot):
         self.discord_connected = True
         if self.user:
             for g in self.guilds:
-                self.logger.info(
+                logger.info(
                     "Logged in as %s on %s[%d]", self.user, g.name, g.id
                 )
                 await insert_event(
@@ -109,11 +119,9 @@ class Bot(commands.Bot):
         if not self.synced:
             for g in self.guilds:
                 await self.tree.sync(guild=g)
-                self.logger.info(
-                    "Synced guild command set for %s[%d]", g.name, g.id
-                )
+                logger.info("Synced guild command set for %s[%d]", g.name, g.id)
             self.synced = True
-        self.logger.info("Ready to go!😼")
+        logger.info("Ready to go!😼")
         return None
 
     async def on_disconnect(self) -> None:
@@ -141,7 +149,7 @@ class Bot(commands.Bot):
             await insert_event(
                 "app_command_error", utc_now_dt().isoformat(), str(error)
             )
-            self.logger.warning("%s", error)
+            logger.warning("%s", error)
         return None
 
 

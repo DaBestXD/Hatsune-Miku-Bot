@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import aiosqlite
 
@@ -17,16 +17,14 @@ async def get_status() -> dict[str, str]:
         cur = await con.execute(query)
         vals = await cur.fetchone()
         if vals:
-            return dict(zip(cols, vals))
+            return dict(zip(cols, vals, strict=True))
         return {}
 
 
 async def uptime_percent_since(hours: int) -> float:
     async with aiosqlite.connect(DB_PATH) as con:
         con.row_factory = aiosqlite.Row
-        cutoff = (
-            datetime.now(timezone.utc) - timedelta(hours=hours)
-        ).isoformat()
+        cutoff = (datetime.now(UTC) - timedelta(hours=hours)).isoformat()
         query = """
             SELECT discord_connection FROM snapshots
             WHERE snapshot_time >= :cutoff AND uptime_seconds > 0

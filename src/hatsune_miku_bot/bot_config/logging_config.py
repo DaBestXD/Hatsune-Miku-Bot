@@ -1,12 +1,13 @@
 import logging
 import sys
+import typing
 
 from hatsune_miku_bot.bot_config.paths import PROJECT_ROOT
 
 
 class ColorFormatter(logging.Formatter):
     RESET = "\033[0m"
-    COLORS = {
+    COLORS: typing.ClassVar = {
         "INFO": "\033[36m",  # cyan
         "WARNING": "\033[33m",  # yellow
         "ERROR": "\033[31m",  # red

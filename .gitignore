@@ -1,11 +1,11 @@
 # Created by venv; see https://docs.python.org/3/library/venv.html
-*EnvHatsuneMiku
 .venv
 *__pycache__
 .env*
 *pyrightconfig.json
 *.markdownlint.json
-*bot.log
 *old_files
 test.py
-*status.db
+data/
+dist
+logs/
