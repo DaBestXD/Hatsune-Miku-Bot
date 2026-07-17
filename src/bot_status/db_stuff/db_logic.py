@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 
@@ -10,6 +11,8 @@ from hatsune_miku_bot.bot_config.constants import DB_PATH
 
 if TYPE_CHECKING:
     from hatsune_miku_bot.bot_config.client import Bot
+
+logger = logging.getLogger(__name__)
 
 
 async def db_init():
@@ -60,10 +63,6 @@ async def insert_snapshot(
         await con.commit()
 
 
-def utc_now_dt() -> datetime:
-    return datetime.now(UTC)
-
-
 def get_bot_status(bot: Bot) -> Literal["online", "degraded", "down"]:
     if not bot.is_ready():
         return "down"
@@ -77,14 +76,15 @@ async def snapshot_loop(bot: Bot):
         try:
             latency = round(bot.latency * 1000, 2) if bot.is_ready() else None
             connection = 1 if bot.is_ready() else 0
-            cur_uptime = int((utc_now_dt() - bot.process_start).total_seconds())
+            utc_now = datetime.now(UTC)
+            cur_uptime = int((utc_now - bot.process_start).total_seconds())
             await insert_snapshot(
-                snapshot_time=utc_now_dt().isoformat(),
+                snapshot_time=utc_now.isoformat(),
                 status=get_bot_status(bot),
                 discord_connection=connection,
                 latency_ms=latency,
                 uptime_seconds=cur_uptime,
             )
         except Exception as e:
-            print(f"Snapshot loop error: {e}")
+            logger.error("Snapshot loop error: %s", e)
         await asyncio.sleep(60)

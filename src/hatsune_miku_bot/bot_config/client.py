@@ -9,7 +9,7 @@ from discord.app_commands import CheckFailure
 from discord.app_commands.errors import AppCommandError
 from discord.ext import commands
 
-from bot_status.db_stuff.db_logic import insert_event, utc_now_dt
+from bot_status.db_stuff.db_logic import insert_event
 from hatsune_miku_bot.bot_config.constants import (
     DISCORD_TOKEN,
     GUILD_ID,
@@ -86,21 +86,23 @@ class Bot(commands.Bot):
     async def on_resumed(self) -> None:
         self.discord_connected = True
         await insert_event(
-            "bot_resume", utc_now_dt().isoformat(), "Bot has resumed"
+            "bot_resume", datetime.now(UTC).isoformat(), "Bot has resumed"
         )
         return None
 
     async def on_shard_disconnect(self, shard_id: int) -> None:
         await insert_event(
             "shard_disconnect",
-            utc_now_dt().isoformat(),
+            datetime.now(UTC).isoformat(),
             f"{shard_id} disconnected",
         )
         return None
 
     async def on_shard_resumed(self, shard_id: int) -> None:
         await insert_event(
-            "shard_resumed", utc_now_dt().isoformat(), f"{shard_id} resumed"
+            "shard_resumed",
+            datetime.now(UTC).isoformat(),
+            f"{shard_id} resumed",
         )
         return None
 
@@ -113,7 +115,7 @@ class Bot(commands.Bot):
                 )
                 await insert_event(
                     "bot_ready",
-                    utc_now_dt().isoformat(),
+                    datetime.now(UTC).isoformat(),
                     f"Bot logged into {g.name}[{g.id}]",
                 )
         if not self.synced:
@@ -128,7 +130,7 @@ class Bot(commands.Bot):
         self.discord_connected = False
         await insert_event(
             "discord_disconnect",
-            utc_now_dt().isoformat(),
+            datetime.now(UTC).isoformat(),
             "Bot has disconnected",
         )
         return None
@@ -147,7 +149,7 @@ class Bot(commands.Bot):
                 interaction, embed=text_only_embed("Error has occured!")
             )
             await insert_event(
-                "app_command_error", utc_now_dt().isoformat(), str(error)
+                "app_command_error", datetime.now(UTC).isoformat(), str(error)
             )
             logger.warning("%s", error)
         return None
