@@ -9,12 +9,12 @@ from discord.app_commands import CheckFailure
 from discord.app_commands.errors import AppCommandError
 from discord.ext import commands
 
+from bot_status.db_stuff.db_logic import insert_event, utc_now_dt
 from hatsune_miku_bot.bot_config.constants import (
     DISCORD_TOKEN,
     GUILD_ID,
     USER_ID,
 )
-from hatsune_miku_bot.db_stuff.db_logic import insert_event, utc_now_dt
 from hatsune_miku_bot.utils.discord_helpers import reply, text_only_embed
 
 logger = logging.getLogger(__name__)

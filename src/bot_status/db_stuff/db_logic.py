@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, Literal
 # ruff: noqa: E501
 import aiosqlite
 
+from bot_status.db_stuff.db_schema import CREATE_EVENTS, CREATE_SNAPSHOTS
 from hatsune_miku_bot.bot_config.constants import DB_PATH
-from hatsune_miku_bot.db_stuff.db_schema import CREATE_EVENTS, CREATE_SNAPSHOTS
 
 if TYPE_CHECKING:
     from hatsune_miku_bot.bot_config.client import Bot

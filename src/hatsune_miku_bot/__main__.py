@@ -2,10 +2,10 @@ import argparse
 import asyncio
 import contextlib
 
+from bot_status.db_stuff.db_logic import db_init, snapshot_loop
 from hatsune_miku_bot.bot_config.client import botsetup
 from hatsune_miku_bot.bot_config.env_loader import load_env_vals
 from hatsune_miku_bot.bot_config.logging_config import logger_config
-from hatsune_miku_bot.db_stuff.db_logic import db_init, snapshot_loop
 
 
 class CmdArgs(argparse.Namespace):
