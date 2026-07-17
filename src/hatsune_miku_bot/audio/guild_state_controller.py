@@ -25,7 +25,6 @@ class GuildStateController:
         self.queue: asyncio.Queue[Event | StopEvent] = asyncio.Queue()
         self.state = GuildPlaybackState()
         self.task: asyncio.Task | None = None
-        self.cache_removal_tasks: dict[str, asyncio.Task[None]] = {}
 
     async def add_event[**P](
         self,
@@ -410,13 +409,6 @@ class SongMods:
             rate *= self.song_pitch
         return rate
 
-    def update_song_position_offset(self) -> None:
-        if self.start_timestamp:
-            self.position_offset_s = (
-                time.monotonic() - self.start_timestamp
-            ) * self.effective_playback_rate
-            logger.debug("Position offset %2f", self.position_offset_s)
-
     def is_nightcore(self) -> bool:
         """
         Nightcore is equivalent to pitch=1.25
@@ -465,6 +457,7 @@ class SongMods:
         self.start_timestamp: float | None = None
         self.position_offset_s: float = 0.0
         self.volume: float = 1.0
+        self.is_song_modified = False
 
 
 @dataclass
@@ -476,7 +469,6 @@ class GuildPlaybackState:
     source: PCMVolumeTransformer | None = None
     text_channel: TextChannel | None = None
     vc: VoiceClient | None = None
-    is_modifying_song: bool = False
 
 
 def _song_mod_to_ffmpeg_str(
