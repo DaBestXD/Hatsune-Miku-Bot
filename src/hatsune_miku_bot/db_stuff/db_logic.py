@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 
 # ruff: noqa: E501
@@ -61,7 +61,7 @@ async def insert_snapshot(
 
 
 def utc_now_dt() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def get_bot_status(bot: Bot) -> Literal["online", "degraded", "down"]:

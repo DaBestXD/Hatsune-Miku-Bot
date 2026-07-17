@@ -48,7 +48,7 @@ class AudioInfoResolver:
             return None
         if max_attempts <= 0:
             return None
-        auth_string = f"{self.client_id}:{self.client_secret}".encode("utf-8")
+        auth_string = f"{self.client_id}:{self.client_secret}".encode()
         url = "https://accounts.spotify.com/api/token"
         auth_base64 = str(base64.b64encode(auth_string), "utf-8")
         headers = {
@@ -86,7 +86,7 @@ class AudioInfoResolver:
                 return await self.get_token(max_attempts - 1)
             logger.error("%s: %s", e.status, e.message)
             return None
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+        except (aiohttp.ClientError, TimeoutError) as e:
             if max_attempts > 1:
                 logger.warning(
                     "Spotify token request failed, retrying... (%d attempts left): %s",  # noqa: E501
@@ -128,7 +128,7 @@ class AudioInfoResolver:
                 )
             logger.error("%s: %s", e.status, e.message)
             return None
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+        except (aiohttp.ClientError, TimeoutError) as e:
             if max_attempts > 1:
                 logger.warning(
                     "Spotify get request failed for %s, retrying... (%d attempts left): %s",  # noqa: E501

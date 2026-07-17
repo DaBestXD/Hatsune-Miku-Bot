@@ -177,7 +177,6 @@ class MikuMusicCommands(commands.Cog):
         """
         Usage /queue Displays current music queue
         """
-        interaction.guild
         if not (guild_id := interaction.guild_id):
             return None
         gp_con = self.guildstate_con_dict[guild_id]
