@@ -5,27 +5,66 @@ import os
 import random
 import re
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, PagedList
 
 from hatsune_miku_bot.audio.song_playlist_classes import Playlist, Song
-from hatsune_miku_bot.bot_config.constants import (
-    AUDIO_OPTS,
-    SP_ALBUM_LINK,
-    SP_ALBUM_METADATA,
-    SP_ALBUM_SONG_METADATA,
-    SP_PLAYLIST_LINK,
-    SP_PLAYLIST_METADATA,
-    SP_PLAYLIST_SONG_METADATA,
-    SP_TRACK_LINK,
-    SPOTIFY_SEARCH_OPTS,
-    YDL_OPTS,
-)
+
+if TYPE_CHECKING:
+    from yt_dlp import _Params
+else:
+    _Params = dict[str, Any]
 
 logger = logging.getLogger(__name__)
+
+
+SP_PLAYLIST_SONG_METADATA = {
+    "market": "US",
+    "fields": "items(track(name,duration_ms,artists(name),external_urls(spotify),album(images(url)))),next,total",  # noqa: E501
+}
+SP_PLAYLIST_METADATA = {
+    "market": "US",
+    "fields": "name,images(url),tracks(total)",
+}
+SP_ALBUM_SONG_METADATA = {
+    "market": "US",
+    "fields": "items(name,duration_ms,artists(name),external_urls(spotify)),next,total",  # noqa: E501
+}
+SP_ALBUM_METADATA = {
+    "market": "US",
+    "fields": "name,total_tracks,images(url)",
+}
+SP_ALBUM_LINK = "https://api.spotify.com/v1/albums/"
+SP_TRACK_LINK = "https://api.spotify.com/v1/tracks/"
+SP_PLAYLIST_LINK = "https://api.spotify.com/v1/playlists/"
+YDL_OPTS: _Params = {
+    "default_search": "ytsearch2",
+    "js_runtimes": {"node": {}},
+    "extract_flat": "in_playlist",
+    "remote_components": {"ejs:github"},
+    "quiet": True,
+    "extractor_args": {"youtube": {"skip": ["hls", "dash", "translated_subs"]}},
+}
+AUDIO_OPTS: _Params = {
+    "format": "bestaudio/best",
+    "js_runtimes": {"node": {}},
+    "default_search": "ytsearch2",
+    "remote_components": {"ejs:github"},
+    "noplaylist": True,
+    "playlist_items": "1-2",
+    "quiet": True,
+}
+SPOTIFY_SEARCH_OPTS: _Params = {
+    "default_search": f"ytsearch{3}",
+    "js_runtimes": {"node": {}},
+    "extract_flat": "in_playlist",
+    "remote_components": {"ejs:github"},
+    "noplaylist": True,
+    "quiet": True,
+}
 
 
 class AudioInfoResolver:
@@ -210,37 +249,31 @@ class AudioInfoResolver:
         return None
 
     def get_soundcloud_info(self, url: str) -> Song | None:
-        # TODO: fix this later
-        # if re.match(r"(.*sets+.*)(?:\?)", url):
-        #     logger.info("Soundcloud playlist was entered")
-        #     return None
-        # try:
-        #     with YoutubeDL(params=YDL_OPTS) as ydl:
-        #         result = ydl.extract_info(url, download=False)
-        #         restricted = True
-        #         formats = result.get("formats")
-        #         result = cast(dict[str, str | None], result)
-        #         if formats:
-        #             for key in formats:
-        #                 if "http_mp3" in key["format_id"]:
-        #                     restricted = False
-        #             if restricted:
-        #                 logger.info("Unable to retrieve soundcloud http_mp3")
-        #                 return None
-        #             song = yt_json_parser([result], EXTRACT_VALS)
-        #             if song:
-        #                 return song[0]
-        #             else:
-        #                 logger.error("Song information empty: %s", url)
-        #                 return None
-        #         logger.error(
-        #             "Regex failed for soundcloud info, Formats: %s Title: %s", formats, url  # noqa: E501
-        #         )
-        #         return None
-        # except DownloadError as e:
-        #     logger.error("Soundcloud download error: %s", e)
-        #     return None
-        raise NotImplementedError("Sound cloud fix later")
+        if re.match(r"(.*sets+.*)(?:\?)", url):
+            logger.info("Soundcloud playlist was entered")
+            return None
+        try:
+            with YoutubeDL(params=YDL_OPTS) as ydl:
+                result = ydl.extract_info(url, download=False)
+                restricted = True
+                formats = result.get("formats")
+                if formats:
+                    for key in formats:
+                        if "http_mp3" in key["format_id"]:
+                            restricted = False
+                    if restricted:
+                        logger.info("Unable to retrieve soundcloud http_mp3")
+                        return None
+                    return Song.from_yt_dlp(result)
+                logger.error(
+                    "Regex failed for soundcloud info, Formats: %s Title: %s",
+                    formats,
+                    url,
+                )
+                return None
+        except DownloadError as e:
+            logger.error("Soundcloud download error: %s", e)
+            return None
 
     def search_query(self, query: str) -> Song | None:
         """

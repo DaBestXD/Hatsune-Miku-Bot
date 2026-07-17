@@ -5,7 +5,7 @@ import random
 import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from typing import Any, Literal, ParamSpec
+from typing import Any, Literal
 
 from discord import Interaction, PCMVolumeTransformer, TextChannel, VoiceClient
 from discord.ext import commands
@@ -16,7 +16,6 @@ from hatsune_miku_bot.audio.song_playlist_classes import Playlist, Song
 from hatsune_miku_bot.utils.discord_helpers import reply, text_only_embed
 
 logger = logging.getLogger(__name__)
-P = ParamSpec("P")
 
 
 class GuildStateController:
@@ -26,8 +25,9 @@ class GuildStateController:
         self.queue: asyncio.Queue[Event | StopEvent] = asyncio.Queue()
         self.state = GuildPlaybackState()
         self.task: asyncio.Task | None = None
+        self.cache_removal_tasks: dict[str, asyncio.Task[None]] = {}
 
-    async def add_event(
+    async def add_event[**P](
         self,
         func: Callable[P, Coroutine[Any, Any, None]],
         *args: P.args,
@@ -102,7 +102,7 @@ class GuildStateController:
             if song:
                 continue
             await self.add_event(self.cache_song, s)
-            asyncio.create_task(self.schedule_removal_from_cache(s.webpage_url))
+            asyncio.create_task(self.schedule_removal_from_cache(s.webpage_url))  # noqa: RUF006
 
     # TODO: DOCSTRING
     async def queue_songs(
@@ -421,7 +421,7 @@ class SongMods:
         """
         Nightcore is equivalent to pitch=1.25
         """
-        return True if self.song_pitch == 1.25 else False
+        return self.song_pitch == 1.25
 
     def interrupt_time(self) -> float:
         if self.start_timestamp is None:
@@ -437,9 +437,7 @@ class SongMods:
             return True
         if self.song_speed:
             return True
-        if self.song_pitch:
-            return True
-        return False
+        return bool(self.song_pitch)
 
     @property
     def combined_song_mods(self) -> str:

@@ -1,4 +1,5 @@
 import io
+from typing import TypedDict
 
 from discord import (
     FFmpegPCMAudio,
@@ -8,8 +9,18 @@ from discord import (
     VoiceProtocol,
 )
 
-from hatsune_miku_bot.bot_config.constants import FFMPEG_OPTS
 from hatsune_miku_bot.utils.discord_helpers import reply, text_only_embed
+
+
+class FFMpegOpts(TypedDict):
+    before_options: str
+    options: str
+
+
+FFMPEG_OPTS: FFMpegOpts = {
+    "before_options": "-nostdin -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",  # noqa: E501
+    "options": "-vn -af loudnorm=I=-12:TP=-1.0:LRA=7",
+}
 
 
 def build_audio(
