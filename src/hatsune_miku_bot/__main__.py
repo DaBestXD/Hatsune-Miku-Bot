@@ -14,7 +14,7 @@ class CmdArgs(argparse.Namespace):
 
 
 def args() -> CmdArgs:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(color=True)
     parser.add_argument(
         "--debugger_enabled",
         help="Launch bot with debug commands",

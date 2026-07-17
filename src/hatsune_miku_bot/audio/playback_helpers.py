@@ -1,5 +1,4 @@
 import io
-from typing import Literal
 
 from discord import (
     FFmpegPCMAudio,
@@ -52,21 +51,3 @@ async def join_vc(
             ephemeral=True,
         )
         return None
-
-
-async def mod_song(
-    mod_type: Literal["pitch", "speed", "bass", "off"],
-    effect_strength: float = 0,
-) -> str:
-    song_mods = ""
-    if mod_type == "pitch":
-        song_mods = (
-            f",aresample=48000,asetrate=48000*{effect_strength},aresample=48000"
-        )
-    elif mod_type == "speed":
-        song_mods = f",atempo={effect_strength}"
-    elif mod_type == "bass":
-        song_mods = f",bass=g={effect_strength}"
-    elif mod_type == "off":
-        song_mods = ""
-    return song_mods

@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import discord
 from discord import Color, Interaction, VoiceClient, ui
 
-from hatsune_miku_bot.audio.audio_resolver import Playlist
 from hatsune_miku_bot.audio.guild_state_controller import (
     GuildStateController,
 )
 from hatsune_miku_bot.audio.playback_helpers import join_vc
+from hatsune_miku_bot.audio.song_playlist_classes import Playlist
 from hatsune_miku_bot.bot_config.constants import DIS_BOT_THUMBNAIL, INVIS_CHAR
 
 if TYPE_CHECKING:
@@ -105,7 +105,7 @@ class QueueView(ui.View):
         self,
         queueEmbed: QueueEmbed,
         miku: MikuMusicCommands,
-        timeout: Optional[float] = 90,
+        timeout: float | None = 90,
     ):
         super().__init__(timeout=timeout)
         self.queueEmbed = queueEmbed

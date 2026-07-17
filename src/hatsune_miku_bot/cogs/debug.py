@@ -2,8 +2,8 @@ import discord
 from discord import Interaction, app_commands
 from discord.ext import commands
 
-from hatsune_miku_bot.audio.audio_resolver import Song
 from hatsune_miku_bot.audio.guild_state_controller import GuildStateController
+from hatsune_miku_bot.audio.song_playlist_classes import Song
 from hatsune_miku_bot.bot_config.constants import GUILD_OBJECT
 from hatsune_miku_bot.cogs.music import MikuMusicCommands
 from hatsune_miku_bot.utils.discord_helpers import (

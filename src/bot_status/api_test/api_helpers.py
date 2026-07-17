@@ -2,9 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import aiosqlite
 
-from hatsune_miku_bot.bot_config.paths import PROJECT_ROOT
-
-DB_PATH = PROJECT_ROOT / "data" / "status.db"
+from hatsune_miku_bot.bot_config.constants import DB_PATH
 
 
 async def get_status() -> dict[str, str]:

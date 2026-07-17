@@ -15,8 +15,6 @@ USER_ID = os.getenv("USER_ID")
 USER_ID = None if not USER_ID else int(USER_ID)
 if GUILD_ID:
     GUILD_OBJECT = discord.Object(id=int(GUILD_ID))
-CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
-CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 # Any cast to make the type checker shut up cause importing _Params doesnt work😾  # noqa: E501
 # Something something private modules something I don't get it yet 🐱
 DB_PATH = PROJECT_ROOT / "data" / "status.db"
@@ -80,22 +78,8 @@ SP_ALBUM_METADATA = {
     "market": "US",
     "fields": "name,total_tracks,images(url)",
 }
-EXTRACT_VALS = ("title", "original_url", "thumbnails", "duration", "view_count")
-EXTRACT_AUD_VALS = ("title", "original_url", "thumbnails", "duration", "url")
-EXTRACT_VALS_PLAYLIST = ("title", "original_url", "thumbnails")
-EXTRACT_VALS_SEARCH = ("title", "url", "thumbnails", "duration", "view_count")
-YOUTUBE = "youtu"
-SOUNDCLOUD = "soundcloud"
-SPOTIFY = "spotify"
 SP_ALBUM_LINK = "https://api.spotify.com/v1/albums/"
 SP_TRACK_LINK = "https://api.spotify.com/v1/tracks/"
 SP_PLAYLIST_LINK = "https://api.spotify.com/v1/playlists/"
 INVIS_CHAR = "\u200b"
-SLOW_REVERB = ",aecho=0.9:0.8:30|60|90|140:0.55|0.45|0.35|0.25,atempo=0.85"
-NIGHTCORE = ",aresample=48000,asetrate=48000*1.25,aresample=48000"
-# In seconds
-CACHE_TIMER_S = 1800
 DIS_BOT_THUMBNAIL = "attachment://hatsuneplush.jpg"
-SPOTIFY_RETRY_STATUSES = {500, 502, 503, 504}
-SPOTIFY_RETRY_DELAYS_S = (0.5, 1.0)
-SPOTIFY_REQUEST_TIMEOUT_S = 5
