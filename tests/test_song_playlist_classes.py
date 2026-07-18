@@ -179,15 +179,3 @@ class PlaylistTests(unittest.TestCase):
 
         self.assertIs(playlist.greatest_view_count(), high)
         self.assertIsNone(Playlist([unknown]).greatest_view_count())
-
-    def test_return_song_info_supports_negative_indices_and_reports_bounds(
-        self,
-    ) -> None:
-        first = make_song(title="First")
-        last = make_song(title="Last")
-        playlist = Playlist([first, last])
-
-        self.assertIs(playlist.return_song_info(0), first)
-        self.assertIs(playlist.return_song_info(-1), last)
-        with self.assertRaisesRegex(IndexError, "Index out of bounds"):
-            playlist.return_song_info(2)

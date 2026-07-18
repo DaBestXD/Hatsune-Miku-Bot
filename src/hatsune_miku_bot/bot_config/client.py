@@ -88,7 +88,6 @@ class Bot(commands.Bot):
         return None
 
     async def on_ready(self) -> None:
-        self.discord_connected = True
         if self.user:
             for g in self.guilds:
                 logger.info(

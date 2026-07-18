@@ -245,15 +245,5 @@ class Playlist:
             return None
         return max(valid_songs, key=lambda s: int(s.view_count))
 
-    def return_song_info(self, idx: int) -> Song | None:
-        if not self.songs:
-            raise ValueError(f"No songs in playlist: {self.__class__.__name__}")
-        try:
-            return self.songs[idx]
-        except IndexError as err:
-            raise IndexError(
-                f"Index out of bounds for playlist: {self.__class__.__name__}"
-            ) from err
-
     def __str__(self) -> str:
         return f"""Playlist title: {self.playlist_title}\nPlaylist url: {self.playlist_url}\nPlaylist length: {self.length}\nPlaylist thumbnail: {self.playlist_thumbnail}\nTotal duration: {self.formatted_duration} """  # noqa: E501
