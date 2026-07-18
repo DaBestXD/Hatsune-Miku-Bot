@@ -1,6 +1,7 @@
 import logging
 import sys
 import typing
+from logging.handlers import RotatingFileHandler
 
 from hatsune_miku_bot.bot_config.paths import PROJECT_ROOT
 
@@ -35,8 +36,12 @@ def logger_config() -> None:
     console_fmt = ColorFormatter(
         "[%(asctime)s] [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S"
     )
-
-    file_h = logging.FileHandler(log_path, encoding="utf-8")
+    file_h = RotatingFileHandler(
+        log_path,
+        maxBytes=10_000_000,
+        backupCount=5,
+        encoding="utf-8",
+    )
     file_h.setFormatter(file_fmt)
 
     stream_h = logging.StreamHandler(sys.stdout)
