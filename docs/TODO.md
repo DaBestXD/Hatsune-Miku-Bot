@@ -4,7 +4,6 @@
 - Define and implement recovery when ffmpeg reports `403 Forbidden` for a
   cached source.
 - Add SoundCloud playlist support.
-- Update the README to use `--debugger_enabled` and document `/loop-all`.
 - Improve Spotify-to-YouTube resolution and caching performance.
 - Add focused regression tests for completed TODO behavior:
   - rotating loop-all queues, switching loop modes, and restarting effects;
