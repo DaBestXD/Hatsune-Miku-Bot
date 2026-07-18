@@ -9,7 +9,6 @@ from discord.app_commands import CheckFailure
 from discord.app_commands.errors import AppCommandError
 from discord.ext import commands
 
-from bot_status.db_stuff.db_logic import insert_event
 from hatsune_miku_bot.bot_config.constants import (
     DISCORD_TOKEN,
     GUILD_ID,
@@ -65,8 +64,13 @@ class Bot(commands.Bot):
 
     async def setup_hook(self) -> None:
         await self.load_extension("hatsune_miku_bot.cogs.music")
-        if self.debugger_on and USER_ID and GUILD_ID:
-            await self.load_extension("hatsune_miku_bot.cogs.debug")
+        if self.debugger_on:
+            if not USER_ID or not GUILD_ID:
+                logger.warning(
+                    "Enabled debugger without user_id or guild_id will not load debugging commands"  # noqa: E501
+                )
+            else:
+                await self.load_extension("hatsune_miku_bot.cogs.debug")
         await self.load_extension("hatsune_miku_bot.cogs.utility")
         for ext in self.extensions:
             logger.info("Loaded %s", ext)
@@ -83,40 +87,12 @@ class Bot(commands.Bot):
         await self.tree.sync()
         return None
 
-    async def on_resumed(self) -> None:
-        self.discord_connected = True
-        await insert_event(
-            "bot_resume", datetime.now(UTC).isoformat(), "Bot has resumed"
-        )
-        return None
-
-    async def on_shard_disconnect(self, shard_id: int) -> None:
-        await insert_event(
-            "shard_disconnect",
-            datetime.now(UTC).isoformat(),
-            f"{shard_id} disconnected",
-        )
-        return None
-
-    async def on_shard_resumed(self, shard_id: int) -> None:
-        await insert_event(
-            "shard_resumed",
-            datetime.now(UTC).isoformat(),
-            f"{shard_id} resumed",
-        )
-        return None
-
     async def on_ready(self) -> None:
         self.discord_connected = True
         if self.user:
             for g in self.guilds:
                 logger.info(
                     "Logged in as %s on %s[%d]", self.user, g.name, g.id
-                )
-                await insert_event(
-                    "bot_ready",
-                    datetime.now(UTC).isoformat(),
-                    f"Bot logged into {g.name}[{g.id}]",
                 )
         if not self.synced:
             for g in self.guilds:
@@ -127,12 +103,7 @@ class Bot(commands.Bot):
         return None
 
     async def on_disconnect(self) -> None:
-        self.discord_connected = False
-        await insert_event(
-            "discord_disconnect",
-            datetime.now(UTC).isoformat(),
-            "Bot has disconnected",
-        )
+        logger.info("Bot has disconnected")
         return None
 
     async def on_app_command_error(
@@ -148,10 +119,7 @@ class Bot(commands.Bot):
             await reply(
                 interaction, embed=text_only_embed("Error has occured!")
             )
-            await insert_event(
-                "app_command_error", datetime.now(UTC).isoformat(), str(error)
-            )
-            logger.warning("%s", error)
+            logger.error("%s", error)
         return None
 
 

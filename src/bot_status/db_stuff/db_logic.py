@@ -1,3 +1,8 @@
+"""
+DEPRECATED
+REMOVE LATER
+"""
+
 import asyncio
 import logging
 from datetime import UTC, datetime

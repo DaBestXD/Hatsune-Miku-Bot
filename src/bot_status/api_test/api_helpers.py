@@ -1,3 +1,8 @@
+"""
+DEPRECATED
+REMOVE LATER
+"""
+
 from datetime import UTC, datetime, timedelta
 
 import aiosqlite

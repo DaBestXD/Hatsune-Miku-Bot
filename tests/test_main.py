@@ -55,7 +55,6 @@ class MainLifecycleTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(entrypoint, "db_init", new=AsyncMock()) as db_init,
             patch.object(entrypoint, "args", return_value=command_args),
-            patch.object(entrypoint, "load_env_vals") as load_env_vals,
             patch.object(entrypoint, "logger_config") as logger_config,
             patch.object(
                 entrypoint, "botsetup", return_value=(bot, "token")
@@ -67,7 +66,6 @@ class MainLifecycleTests(unittest.IsolatedAsyncioTestCase):
             await entrypoint.main()
 
         db_init.assert_awaited_once_with()
-        load_env_vals.assert_not_called()
         logger_config.assert_called_once_with()
         botsetup.assert_called_once_with(True)
         bot.start.assert_awaited_once_with(token="token")

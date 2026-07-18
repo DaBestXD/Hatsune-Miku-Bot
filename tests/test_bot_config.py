@@ -140,42 +140,10 @@ class BotClientTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(client_module, "reply", new=AsyncMock()) as reply_mock,
-            patch.object(
-                client_module, "insert_event", new=AsyncMock()
-            ) as insert_event,
         ):
             await bot.on_app_command_error(interaction, CheckFailure())
-            insert_event.assert_not_awaited()
 
             error = AppCommandError("boom")
             await bot.on_app_command_error(interaction, error)
-
         self.assertEqual(reply_mock.await_count, 2)
-        insert_event.assert_awaited_once()
-        self.assertIsNotNone(insert_event.await_args)
-        assert insert_event.await_args is not None
-        self.assertEqual(insert_event.await_args.args[0], "app_command_error")
-        self.assertEqual(insert_event.await_args.args[2], "boom")
-        await bot.close()
-
-
-class BotEventTests(unittest.IsolatedAsyncioTestCase):
-    async def test_connection_events_update_state_and_record_status(
-        self,
-    ) -> None:
-        bot = client_module.Bot(owner_id=None)
-
-        with patch.object(
-            client_module, "insert_event", new=AsyncMock()
-        ) as insert_event:
-            await bot.on_resumed()
-            self.assertTrue(bot.discord_connected)
-            await bot.on_disconnect()
-            self.assertFalse(bot.discord_connected)
-
-        self.assertEqual(insert_event.await_count, 2)
-        self.assertEqual(
-            [item.args[0] for item in insert_event.await_args_list],
-            ["bot_resume", "discord_disconnect"],
-        )
         await bot.close()

@@ -1,3 +1,8 @@
+"""
+DEPRECATED
+REMOVE LATER
+"""
+
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

@@ -4,7 +4,6 @@ import contextlib
 
 from bot_status.db_stuff.db_logic import db_init, snapshot_loop
 from hatsune_miku_bot.bot_config.client import botsetup
-from hatsune_miku_bot.bot_config.env_loader import load_env_vals
 from hatsune_miku_bot.bot_config.logging_config import logger_config
 
 
@@ -20,19 +19,12 @@ def args() -> CmdArgs:
         help="Launch bot with debug commands",
         action="store_true",
     )
-    parser.add_argument(
-        "--docker_enabled",
-        help="Launch bot using docker",
-        action="store_true",
-    )
     return parser.parse_args(namespace=CmdArgs())
 
 
 async def main() -> None:
     await db_init()
     cmd_args = args()
-    if not cmd_args.docker_enabled:
-        load_env_vals()
     logger_config()
     bot, token = botsetup(cmd_args.debugger_enabled)
     snapshot_task = asyncio.create_task(snapshot_loop(bot))
