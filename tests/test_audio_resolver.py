@@ -261,6 +261,30 @@ class YtDlpResolverTests(unittest.TestCase):
             "ytsearch3:world is mine", download=False, process=False
         )
 
+    def test_search_query_returns_none_when_all_candidates_filtered(
+        self,
+    ) -> None:
+        ydl = MagicMock()
+        ydl.extract_info.return_value = {
+            "entries": [
+                {
+                    "title": "Channel",
+                    "url": "https://youtube.test/channel/miku",
+                    "view_count": 10_000,
+                },
+                {
+                    "title": "Topic Channel",
+                    "url": "https://youtube.test/channel/topic",
+                    "view_count": 20_000,
+                },
+            ]
+        }
+
+        with patch.object(resolver, "YoutubeDL", return_value=ydl_context(ydl)):
+            result = self.audio_resolver.search_query("world is mine")
+
+        self.assertIsNone(result)
+
     def test_get_youtube_info_returns_song_or_playlist(self) -> None:
         track_result = {
             "title": "Track",
