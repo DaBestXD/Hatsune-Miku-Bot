@@ -69,8 +69,10 @@ class LoggingConfigTests(unittest.TestCase):
         with (
             patch.object(logging_config, "PROJECT_ROOT", fake_root),
             patch.object(
-                logging_config.logging, "FileHandler", return_value=file_handler
-            ),
+                logging_config,
+                "RotatingFileHandler",
+                return_value=file_handler,
+            ) as rotating_file_handler,
             patch.object(
                 logging_config.logging,
                 "StreamHandler",
@@ -84,6 +86,12 @@ class LoggingConfigTests(unittest.TestCase):
             logging_config.logger_config()
 
         fake_log_dir.mkdir.assert_called_once_with(parents=True, exist_ok=True)
+        rotating_file_handler.assert_called_once_with(
+            fake_log_path,
+            maxBytes=10_000_000,
+            backupCount=5,
+            encoding="utf-8",
+        )
         file_handler.setFormatter.assert_called_once()
         stream_handler.setFormatter.assert_called_once()
         basic_config.assert_called_once()

@@ -231,26 +231,11 @@ class GuildStateController:
         return None
 
     async def finished_playback(self, ffmpeg_error: str) -> None:
-        if "403 Forbidden" in ffmpeg_error:
-            if not self.state.active_song:
-                logger.warning("403 error while no active song set")
-            else:
-                try:
-                    self.state.song_cache.pop(
-                        self.state.active_song.webpage_url
-                    )
-                    if self.state.text_channel:
-                        await self.state.text_channel.send(
-                            embed=self.state.active_song.return_err_embed()
-                        )
-                    else:
-                        logger.warning(
-                            "No text channel was set for error playback"
-                        )
-                except KeyError as e:
-                    logger.warning("%s", e)
         if ffmpeg_error:
             logger.debug("%s", ffmpeg_error)
+        if "403 Forbidden" in ffmpeg_error:
+            await self.recover_stale_audio_source()
+            return None
         if not self.state.song_mods.is_song_modified:
             self.state.song_mods.start_timestamp = None
             self.state.song_mods.position_offset_s = 0
@@ -280,6 +265,20 @@ class GuildStateController:
         else:
             await self.add_event(self.begin_playback)
             return None
+
+    async def recover_stale_audio_source(self) -> None:
+        active_song = self.state.active_song
+        if not active_song:
+            logger.warning("403 error while no active song set")
+            return None
+        self.state.song_cache.pop(active_song.webpage_url, None)
+        self.state.song_mods.start_timestamp = None
+        self.state.song_mods.position_offset_s = 0
+        if not self.state.songs or self.state.songs[0] is not active_song:
+            self.state.songs.insert(0, active_song)
+        self.state.active_song = active_song
+        await self.add_event(self.begin_playback)
+        return None
 
     async def skip(self, interaction: Interaction) -> None:
         next_song = self.state.songs[1] if len(self.state.songs) >= 2 else None

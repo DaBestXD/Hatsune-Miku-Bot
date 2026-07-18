@@ -263,6 +263,44 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(looping.state.songs, [first, second])
         self.assertIs(looping.state.active_song, first)
 
+    async def test_finished_playback_recovers_stale_cached_source(
+        self,
+    ) -> None:
+        for song_loop, song_loop_all in (
+            (False, False),
+            (True, False),
+            (False, True),
+        ):
+            with self.subTest(song_loop=song_loop, song_loop_all=song_loop_all):
+                first = make_song("First", "https://song.test/1")
+                second = make_song("Second", "https://song.test/2")
+                controller = make_controller()
+                controller.state.songs = [first, second]
+                controller.state.active_song = first
+                controller.state.song_cache = {
+                    first.webpage_url: "https://audio.test/stale",
+                    second.webpage_url: "https://audio.test/second",
+                }
+                controller.state.song_mods.song_loop = song_loop
+                controller.state.song_mods.song_loop_all = song_loop_all
+                controller.state.song_mods.start_timestamp = 10.0
+                controller.state.song_mods.position_offset_s = 20.0
+
+                await controller.finished_playback("HTTP error 403 Forbidden")
+
+                self.assertEqual(controller.state.songs, [first, second])
+                self.assertIs(controller.state.active_song, first)
+                self.assertNotIn(first.webpage_url, controller.state.song_cache)
+                self.assertEqual(
+                    controller.state.song_cache,
+                    {second.webpage_url: "https://audio.test/second"},
+                )
+                self.assertIsNone(controller.state.song_mods.start_timestamp)
+                self.assertEqual(
+                    controller.state.song_mods.position_offset_s, 0
+                )
+                self.assertEqual(controller.queue.qsize(), 1)
+
 
 class QueueMutationTests(unittest.IsolatedAsyncioTestCase):
     async def test_skip_disables_loop_stops_voice_and_schedules_cache(
