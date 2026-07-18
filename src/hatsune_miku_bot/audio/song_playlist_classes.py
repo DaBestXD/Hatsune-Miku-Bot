@@ -38,7 +38,6 @@ class Song:
             self.duration = 0
             self.formatted_duration = "0"
         self.view_count: str = view_count
-        self.source = ""
 
     @classmethod
     def from_spotify(
@@ -75,6 +74,14 @@ class Song:
             duration=str(_info_dict.get("duration")),
             view_count=str(_info_dict.get("view_count")),
         )
+
+    def normalize_song_title(self) -> str:
+        """
+        To be used only for spotify fuzzy string matching
+        """
+        normalize_title = self.title.replace(" - ", "").lower()
+        words = sorted(normalize_title.split(" "))
+        return " ".join(words)
 
     def return_embed(
         self,

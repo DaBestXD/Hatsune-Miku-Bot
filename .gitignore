@@ -2,8 +2,7 @@
 .venv
 *__pycache__
 .env*
-*pyrightconfig.json
-*.markdownlint.json
+!.env.example
 *old_files
 test.py
 data/

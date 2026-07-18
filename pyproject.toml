@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-hatsune-miku-bot = "hatsune_miku_bot.main:run"
+hatsune-miku-bot = "hatsune_miku_bot.__main__:run"
 
 [dependency-groups]
 dev = ["pytest", "types-yt-dlp>=2026.3.17.20260605"]

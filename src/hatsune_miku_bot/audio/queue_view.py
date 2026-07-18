@@ -81,7 +81,7 @@ class QueueEmbed:
             )
             self.embed.add_field(
                 name=INVIS_CHAR,
-                value=f"Nightcore:`{not gp_con.state.song_mods.is_nightcore()}`\nSongs:`{len(playlist.songs) - 1}`",  # noqa: E501
+                value=f"Nightcore:`{gp_con.state.song_mods.is_nightcore()}`\nSongs:`{len(playlist.songs) - 1}`",  # noqa: E501
             )
             self.embed.add_field(
                 name=INVIS_CHAR,

@@ -5,7 +5,9 @@ import os
 import random
 import re
 import time
+from difflib import SequenceMatcher
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote_plus
 
 import aiohttp
 from yt_dlp import YoutubeDL
@@ -109,8 +111,8 @@ class AudioInfoResolver:
                         "Token reponse was of type %s not dict",
                         type(token_response),
                     )
-                # No 'get' used here so fail fast, means json structure has changed  # noqa: E501
-                # and needs to be updated
+                # No 'get' used here so fail fast, means json structure has
+                # changed and needs to be updated
                 self.token = token_response["access_token"]
                 self.token_expiry = time.time() + (
                     token_response["expires_in"] - random.randint(30, 120)
@@ -185,6 +187,11 @@ class AudioInfoResolver:
     async def get_spotify_info(
         self, path_type: str, id: str
     ) -> Playlist | Song | None:
+        """
+        For spotify platlist/albums two api calls are required
+        One for the actualy container metadata(playlist title, etc.)
+        Another one for information about songs in the container
+        """
         if "album/" in path_type:
             container_metadata = await self.spotify_get_request(
                 SP_ALBUM_LINK + id,
@@ -294,6 +301,8 @@ class AudioInfoResolver:
                 songs = [Song.from_yt_dlp(e) for e in entries if e]
                 # Filter out channel results
                 songs = [s for s in songs if "channel/" not in s.webpage_url]
+                if not songs:
+                    return None
                 return Playlist(songs).greatest_view_count()
 
         except DownloadError as e:
@@ -347,39 +356,40 @@ class AudioInfoResolver:
         return None
 
 
+def rank_spotify_search_results(songs: list[Song], query: Song) -> Song:
+    str_song__to_match = query.normalize_song_title()
+    matches: list[tuple[Song, float]] = []
+    for s in songs:
+        ratio = SequenceMatcher(
+            None,
+            str_song__to_match,
+            s.normalize_song_title(),
+        ).ratio()
+        matches.append((s, ratio))
+    return max(matches, key=lambda song: song[1])[0]
+
+
 def _get_spotify_source_impl(query: Song) -> str | None:
     with YoutubeDL(SPOTIFY_SEARCH_OPTS) as ydl:
         result = ydl.extract_info(
-            f"ytsearch3:{query.title}", download=False, process=False
+            f"https://music.youtube.com/search?q={quote_plus(query.title)}#songs",
+            download=False,
+            process=False,
         )
         entries = result.get("entries")
-        # tuple of viewcount and source url
-        songs: list[tuple[int, str | None]] = []
-        if not entries:
-            logger.info(
-                "Unable to find entries for %s, link: %s",
-                query.title,
-                query.webpage_url,
-            )
+        if not entries or isinstance(entries, PagedList):
+            logger.debug("Entries returned none or PagedList")
             return None
-
-        for n in entries:
-            if not isinstance(n, dict):
-                continue
-            url = n.get("url") or None
-            view_count: int = n.get("view_count") or 0
-            songs.append((view_count, url))
-
+        songs = [Song.from_yt_dlp(e) for e in entries][:3]
         if not songs:
-            logger.info(
-                "Unable to find valid entries for %s, link: %s",
+            logger.warning(
+                "No songs returned for %s[%s]",
                 query.title,
                 query.webpage_url,
             )
             return None
-
-        _, url = max(songs)
-        if not url:
+        end_song = rank_spotify_search_results(songs, query)
+        if not end_song.webpage_url:
             logger.info(
                 "Unable to find valid URL for %s, link: %s",
                 query.title,
@@ -387,12 +397,15 @@ def _get_spotify_source_impl(query: Song) -> str | None:
             )
             return None
         with YoutubeDL(AUDIO_OPTS) as ydl:
-            resolved = ydl.extract_info(url=url, download=False)
+            resolved = ydl.extract_info(
+                url=end_song.webpage_url, download=False
+            )
             logger.info(
-                "Loaded audio for spotify link: %s, %s, Resolved to: %s",
+                "Loaded audio for spotify link: %s, %s, Resolved to: [%s]%s",
                 query.title,
                 query.webpage_url,
-                url,
+                end_song.title,
+                end_song.webpage_url,
             )
             return resolved.get("url")
 
@@ -400,7 +413,6 @@ def _get_spotify_source_impl(query: Song) -> str | None:
 def _get_audio_source_impl(query: Song) -> str | None:
     try:
         if "spotify" in query.webpage_url:
-            # TODO: implement fuzzy seach later refer to older commit logic
             return _get_spotify_source_impl(query)
         else:
             with YoutubeDL(AUDIO_OPTS) as ydl:
@@ -410,6 +422,7 @@ def _get_audio_source_impl(query: Song) -> str | None:
                     query.title,
                     query.webpage_url.replace("https://", ""),
                 )
+                query.webpage_url = query.webpage_url
                 return result.get("url")
     except DownloadError as e:
         logger.error("Audio source download error: %s", e)

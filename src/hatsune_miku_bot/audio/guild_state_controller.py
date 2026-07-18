@@ -220,10 +220,27 @@ class GuildStateController:
         )
         return None
 
-    async def finished_playback(self, ffmpeg_error: str):
+    async def finished_playback(self, ffmpeg_error: str) -> None:
         if "403 Forbidden" in ffmpeg_error:
-            # TODO: add cache removal
-            pass
+            if not self.state.active_song:
+                logger.warning("403 error while no active song set")
+            else:
+                try:
+                    self.state.song_cache.pop(
+                        self.state.active_song.webpage_url
+                    )
+                    if self.state.text_channel:
+                        await self.state.text_channel.send(
+                            embed=self.state.active_song.return_err_embed()
+                        )
+                    else:
+                        logger.warning(
+                            "No text channel was set for error playback"
+                        )
+                except KeyError as e:
+                    logger.warning("%s", e)
+        if ffmpeg_error:
+            logger.debug("%s", ffmpeg_error)
         if not self.state.song_mods.is_song_modified:
             self.state.song_mods.start_timestamp = None
             self.state.song_mods.position_offset_s = 0
@@ -245,6 +262,7 @@ class GuildStateController:
             return None
         else:
             await self.add_event(self.begin_playback)
+            return None
 
     async def skip(self, interaction: Interaction) -> None:
         next_song = self.state.songs[1] if len(self.state.songs) >= 2 else None
@@ -465,6 +483,9 @@ class GuildPlaybackState:
     active_song: Song | None = None
     songs: list[Song] = field(default_factory=list)
     song_cache: dict[str, str] = field(default_factory=dict)
+    """
+    Key is webpage_url, value is the source
+    """
     song_mods: SongMods = field(default_factory=SongMods)
     source: PCMVolumeTransformer | None = None
     text_channel: TextChannel | None = None
