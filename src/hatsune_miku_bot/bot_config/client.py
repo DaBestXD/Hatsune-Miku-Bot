@@ -14,16 +14,21 @@ from hatsune_miku_bot.bot_config.constants import (
     GUILD_ID,
     USER_ID,
 )
+from hatsune_miku_bot.cogs.music import MikuMusicCommands
+from hatsune_miku_bot.db_logging.db_main import DBLogic
 from hatsune_miku_bot.utils.discord_helpers import reply, text_only_embed
 
 logger = logging.getLogger(__name__)
 
 
 class Bot(commands.Bot):
-    def __init__(self, owner_id: int | None, debugger_on: bool = False) -> None:
+    def __init__(
+        self, owner_id: int | None, db_logic: DBLogic, debugger_on: bool = False
+    ) -> None:
         self.synced: bool = False
         self.debugger_on = debugger_on
         self.process_start = datetime.now(UTC)
+        self.db_logic = db_logic
         intents = discord.Intents.default()
         intents.message_content = True
         intents.voice_states = True
@@ -63,7 +68,6 @@ class Bot(commands.Bot):
             )
 
     async def setup_hook(self) -> None:
-        await self.load_extension("hatsune_miku_bot.cogs.music")
         if self.debugger_on:
             if not USER_ID or not GUILD_ID:
                 logger.warning(
@@ -72,6 +76,7 @@ class Bot(commands.Bot):
             else:
                 await self.load_extension("hatsune_miku_bot.cogs.debug")
         await self.load_extension("hatsune_miku_bot.cogs.utility")
+        await self.add_cog(MikuMusicCommands(self, self.db_logic))
         for ext in self.extensions:
             logger.info("Loaded %s", ext)
 
@@ -122,7 +127,10 @@ class Bot(commands.Bot):
         return None
 
 
-def botsetup(debugger_on: bool = False) -> tuple[Bot, str]:
+def botsetup(db_logic: DBLogic, debugger_on: bool = False) -> tuple[Bot, str]:
     if not DISCORD_TOKEN:
         raise ValueError("Discord token cannot be none")
-    return (Bot(owner_id=USER_ID, debugger_on=debugger_on), DISCORD_TOKEN)
+    return (
+        Bot(owner_id=USER_ID, db_logic=db_logic, debugger_on=debugger_on),
+        DISCORD_TOKEN,
+    )

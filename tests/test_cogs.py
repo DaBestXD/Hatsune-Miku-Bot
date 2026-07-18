@@ -32,7 +32,9 @@ class FakeSession:
 
 class MusicCogTests(unittest.IsolatedAsyncioTestCase):
     async def test_cog_load_and_unload_manage_audio_session(self) -> None:
-        cog = music_module.MikuMusicCommands(as_any(SimpleNamespace()))
+        cog = music_module.MikuMusicCommands(
+            as_any(SimpleNamespace()), as_any(AsyncMock())
+        )
 
         with (
             patch.object(music_module, "ClientSession", FakeSession),
@@ -52,7 +54,8 @@ class MusicCogTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_guild_join_and_remove_manage_controller(self) -> None:
         bot = as_any(SimpleNamespace())
-        cog = music_module.MikuMusicCommands(bot)
+        db_logic = as_any(AsyncMock())
+        cog = music_module.MikuMusicCommands(bot, db_logic)
         guild = as_any(SimpleNamespace(id=42, name="Test Guild"))
         controller = SimpleNamespace(run=AsyncMock(), stop=AsyncMock())
 
@@ -61,7 +64,7 @@ class MusicCogTests(unittest.IsolatedAsyncioTestCase):
         ) as controller_class:
             await cog.on_guild_join(guild)
 
-        controller_class.assert_called_once_with(bot, 42)
+        controller_class.assert_called_once_with(bot, 42, db_logic)
         controller.run.assert_awaited_once_with()
         self.assertIs(cog.guildstate_con_dict[42], controller)
 
@@ -76,10 +79,13 @@ class MusicCogTests(unittest.IsolatedAsyncioTestCase):
             SimpleNamespace(id=2, name="Two"),
         ]
         bot = as_any(SimpleNamespace(guilds=guilds))
-        cog = music_module.MikuMusicCommands(bot)
+        db_logic = as_any(AsyncMock())
+        cog = music_module.MikuMusicCommands(bot, db_logic)
         controllers: list[SimpleNamespace] = []
 
-        def controller_factory(_bot: object, guild_id: int) -> SimpleNamespace:
+        def controller_factory(
+            _bot: object, guild_id: int, _db_logic: object
+        ) -> SimpleNamespace:
             controller = SimpleNamespace(id=guild_id, run=AsyncMock())
             controllers.append(controller)
             return controller
@@ -119,7 +125,9 @@ class MusicCogTests(unittest.IsolatedAsyncioTestCase):
             begin_playback=AsyncMock(),
             add_event=AsyncMock(),
         )
-        cog = music_module.MikuMusicCommands(as_any(SimpleNamespace()))
+        cog = music_module.MikuMusicCommands(
+            as_any(SimpleNamespace()), as_any(AsyncMock())
+        )
         cog.audio_info_resolver = as_any(resolver)
         cog.guildstate_con_dict[42] = as_any(controller)
 

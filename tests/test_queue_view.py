@@ -27,7 +27,7 @@ def make_song(number: int) -> Song:
 
 def make_controller(song_count: int) -> GuildStateController:
     bot = as_any(SimpleNamespace(loop=asyncio.get_running_loop()))
-    controller = GuildStateController(bot, 42)
+    controller = GuildStateController(bot, 42, as_any(AsyncMock()))
     controller.state.songs = [make_song(index) for index in range(song_count)]
     controller.state.active_song = controller.state.songs[0]
     return controller

@@ -91,11 +91,12 @@ class LoggingConfigTests(unittest.TestCase):
 
 class BotClientTests(unittest.IsolatedAsyncioTestCase):
     def test_botsetup_requires_token_and_forwards_configuration(self) -> None:
+        db_logic = as_any(AsyncMock())
         with (
             patch.object(client_module, "DISCORD_TOKEN", None),
             self.assertRaisesRegex(ValueError, "Discord token cannot be none"),
         ):
-            client_module.botsetup()
+            client_module.botsetup(db_logic)
 
         bot = object()
         with (
@@ -103,13 +104,23 @@ class BotClientTests(unittest.IsolatedAsyncioTestCase):
             patch.object(client_module, "USER_ID", 39),
             patch.object(client_module, "Bot", return_value=bot) as bot_class,
         ):
-            result = client_module.botsetup(debugger_on=True)
+            result = client_module.botsetup(db_logic, debugger_on=True)
 
         self.assertEqual(result, (bot, "token"))
-        bot_class.assert_called_once_with(owner_id=39, debugger_on=True)
+        bot_class.assert_called_once_with(
+            owner_id=39,
+            db_logic=db_logic,
+            debugger_on=True,
+        )
 
     async def test_setup_hook_loads_expected_extensions(self) -> None:
-        bot = client_module.Bot(owner_id=39, debugger_on=True)
+        db_logic = as_any(AsyncMock())
+        bot = client_module.Bot(
+            owner_id=39,
+            db_logic=db_logic,
+            debugger_on=True,
+        )
+        music_cog = as_any(object())
 
         with (
             patch.object(client_module, "USER_ID", 39),
@@ -117,6 +128,12 @@ class BotClientTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 bot, "load_extension", new=AsyncMock()
             ) as load_extension,
+            patch.object(bot, "add_cog", new=AsyncMock()) as add_cog,
+            patch.object(
+                client_module,
+                "MikuMusicCommands",
+                return_value=music_cog,
+            ) as music_cog_class,
             patch.object(bot.tree, "sync", new=AsyncMock()) as sync,
         ):
             await bot.setup_hook()
@@ -124,18 +141,19 @@ class BotClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             load_extension.await_args_list,
             [
-                call("hatsune_miku_bot.cogs.music"),
                 call("hatsune_miku_bot.cogs.debug"),
                 call("hatsune_miku_bot.cogs.utility"),
             ],
         )
+        music_cog_class.assert_called_once_with(bot, db_logic)
+        add_cog.assert_awaited_once_with(music_cog)
         sync.assert_awaited_once_with()
         await bot.close()
 
     async def test_app_command_errors_reply_and_record_unexpected_errors(
         self,
     ) -> None:
-        bot = client_module.Bot(owner_id=39)
+        bot = client_module.Bot(owner_id=39, db_logic=as_any(AsyncMock()))
         interaction = as_any(SimpleNamespace())
 
         with (

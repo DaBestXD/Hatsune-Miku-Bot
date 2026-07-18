@@ -20,7 +20,9 @@ from hatsune_miku_bot.audio.guild_state_controller import (
 )
 from hatsune_miku_bot.audio.playback_helpers import join_vc
 from hatsune_miku_bot.audio.queue_view import QueueEmbed, QueueView
+from hatsune_miku_bot.db_logging.db_main import DBLogic
 from hatsune_miku_bot.utils.discord_helpers import (
+    code_block_embed,
     gen_bot_thumbnail,
     reply,
     text_only_embed,
@@ -35,14 +37,18 @@ class MikuMusicCommands(commands.Cog):
     Cogname: musicplayer
     """
 
-    def __init__(self, bot: commands.Bot) -> None:
+    def __init__(self, bot: commands.Bot, db_logic: DBLogic) -> None:
         self.bot: commands.Bot = bot
         self.guildstate_con_dict: dict[int, GuildStateController] = {}
         self.synced: bool = False
         self.audio_session: ClientSession | None = None
         self.audio_info_resolver: AudioInfoResolver | None = None
+        self.db_logic = db_logic
 
     async def cog_load(self) -> None:
+        """
+        Cog loading and unloading would only be caused by debugging commands
+        """
         if not self.audio_session:
             logger.debug("Creating Audio session")
             self.audio_session = ClientSession(timeout=ClientTimeout(total=10))
@@ -51,6 +57,7 @@ class MikuMusicCommands(commands.Cog):
             logger.debug("Audio session already created")
 
     async def cog_unload(self) -> None:
+        # Blah blah doesn't stop all instances blah blah
         if self.audio_session and not self.audio_session.closed:
             logger.debug("Closing audio session")
             await self.audio_session.close()
@@ -78,7 +85,7 @@ class MikuMusicCommands(commands.Cog):
             guild.id,
         )
         self.guildstate_con_dict[guild.id] = GuildStateController(
-            self.bot, guild.id
+            self.bot, guild.id, self.db_logic
         )
         await self.guildstate_con_dict[guild.id].run()
         return None
@@ -88,7 +95,7 @@ class MikuMusicCommands(commands.Cog):
         if not self.synced:
             for g in self.bot.guilds:
                 self.guildstate_con_dict[g.id] = GuildStateController(
-                    self.bot, g.id
+                    self.bot, g.id, self.db_logic
                 )
                 await self.guildstate_con_dict[g.id].run()
                 logger.info("Added %s[%d] to GuildPlaybackState", g.name, g.id)
@@ -384,6 +391,24 @@ class MikuMusicCommands(commands.Cog):
         await gp_con.add_event(gp_con.set_speed, interaction, effect_strength)
         return None
 
+    @app_commands.command(
+        name="song-tracker",
+        description="Returns the song ranking for this server",
+    )
+    @app_commands.guild_only()
+    async def song_tracker(self, interaction: Interaction):
+        if not (guild_id := interaction.guild_id):
+            return None
+        await interaction.response.defer()
+        gp_con = self.guildstate_con_dict[guild_id]
+        songs = await gp_con.db_logic.rank_song_per_guild(guild_id)
+        # TODO: messy for now just fix later, just for prototyping
+        # something something char limit fix later
+        _str_songs = [
+            f"{position}. {title}: {total_plays} plays"
+            for position, (title, total_plays) in enumerate(songs, start=1)
+        ]
 
-async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(MikuMusicCommands(bot))
+        embed = code_block_embed(_str_songs, "Most songs played")
+        await reply(interaction, embed=embed)
+        return None

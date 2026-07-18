@@ -1,5 +1,6 @@
 # TODO
 
+- Implement deterministic Spotify-to-YouTube fuzzy matching based on the song !HALF-DONE!
 - Define and implement recovery when ffmpeg reports `403 Forbidden` for a
   cached source.
 - Restrict music-cog voice-state updates to events for the bot's own member.
@@ -7,7 +8,6 @@
 - Update the README to use `--debugger_enabled` and document `/loop-all`.
 - Improve Spotify-to-YouTube resolution and caching performance.
 - Add focused regression tests for completed TODO behavior:
-  - ranking Spotify-to-YouTube matches deterministically;
   - rotating loop-all queues, switching loop modes, and restarting effects;
   - displaying the actual nightcore state in the queue embed;
   - clearing the built audio source on stop while retaining the URL cache;

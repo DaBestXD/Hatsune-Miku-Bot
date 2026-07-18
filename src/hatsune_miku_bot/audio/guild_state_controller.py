@@ -13,18 +13,20 @@ from discord.ext import commands
 from hatsune_miku_bot.audio.audio_resolver import get_audio_source
 from hatsune_miku_bot.audio.playback_helpers import build_audio
 from hatsune_miku_bot.audio.song_playlist_classes import Playlist, Song
+from hatsune_miku_bot.db_logging.db_main import DBLogic
 from hatsune_miku_bot.utils.discord_helpers import reply, text_only_embed
 
 logger = logging.getLogger(__name__)
 
 
 class GuildStateController:
-    def __init__(self, bot: commands.Bot, id: int) -> None:
+    def __init__(self, bot: commands.Bot, id: int, db_logic: DBLogic) -> None:
         self.id = id
         self.bot = bot
         self.queue: asyncio.Queue[Event | StopEvent] = asyncio.Queue()
         self.state = GuildPlaybackState()
         self.task: asyncio.Task | None = None
+        self.db_logic = db_logic
 
     async def add_event[**P](
         self,
@@ -38,7 +40,11 @@ class GuildStateController:
         await self.queue.put(Event(func_to_execute))
 
     async def stop(self) -> None:
+        if not self.task or self.task.done():
+            return None
         await self.queue.put(StopEvent())
+        await self.task
+        self.task = None
 
     async def run(self) -> None:
         if self.task and not self.task.done():
@@ -196,6 +202,10 @@ class GuildStateController:
         if self.state.song_mods.is_song_modified:
             self.state.song_mods.is_song_modified = False
             return None
+        else:
+            await self.db_logic.insert_song_playback(
+                self.state.active_song, self.id
+            )
         if self.state.text_channel:
             next_song = (
                 self.state.songs[1] if len(self.state.songs) >= 2 else None
@@ -414,7 +424,9 @@ class GuildStateController:
 
 @dataclass
 class StopEvent:
-    pass
+    """
+    Sentinel event to stop the event loop
+    """
 
 
 @dataclass
@@ -464,6 +476,10 @@ class SongMods:
 
     @property
     def is_song_mods_on(self) -> bool:
+        """
+        Currently not used but will probably used later,
+        for song embed information
+        """
         if self.song_bass:
             return True
         if self.song_speed:

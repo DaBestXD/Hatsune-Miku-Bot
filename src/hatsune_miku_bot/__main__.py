@@ -4,6 +4,7 @@ import contextlib
 
 from hatsune_miku_bot.bot_config.client import botsetup
 from hatsune_miku_bot.bot_config.logging_config import logger_config
+from hatsune_miku_bot.db_logging.db_main import DBLogic
 
 
 class CmdArgs(argparse.Namespace):
@@ -23,11 +24,13 @@ def args() -> CmdArgs:
 async def main() -> None:
     cmd_args = args()
     logger_config()
-    bot, token = botsetup(cmd_args.debugger_enabled)
+    db = await DBLogic.async_init()
     try:
-        await bot.start(token=token)
+        bot, token = botsetup(db, cmd_args.debugger_enabled)
+        async with bot:
+            await bot.start(token)
     finally:
-        await bot.close()
+        await db.close()
 
 
 def run() -> None:

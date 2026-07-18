@@ -25,7 +25,13 @@ def make_song(title: str, url: str) -> Song:
 
 def make_controller() -> GuildStateController:
     bot = as_any(SimpleNamespace(loop=asyncio.get_running_loop()))
-    return GuildStateController(bot, 42)
+    db_logic = as_any(
+        SimpleNamespace(
+            insert_song_playback=AsyncMock(),
+            rank_song_per_guild=AsyncMock(return_value=[]),
+        )
+    )
+    return GuildStateController(bot, 42, db_logic)
 
 
 class FakeTextChannel:
@@ -71,10 +77,12 @@ class EventLoopTests(unittest.IsolatedAsyncioTestCase):
         await controller.add_event(failing)
         await controller.add_event(succeeding)
         await asyncio.wait_for(completed.wait(), timeout=1)
+        task = controller.task
         await controller.stop()
         await asyncio.wait_for(controller.queue.join(), timeout=1)
-        assert controller.task is not None
-        await controller.task
+        self.assertIsNone(controller.task)
+        assert task is not None
+        await task
 
 
 class CacheAndQueueTests(unittest.IsolatedAsyncioTestCase):
