@@ -3,7 +3,6 @@
 - Implement deterministic Spotify-to-YouTube fuzzy matching based on the song !HALF-DONE!
 - Define and implement recovery when ffmpeg reports `403 Forbidden` for a
   cached source.
-- Restrict music-cog voice-state updates to events for the bot's own member.
 - Add SoundCloud playlist support.
 - Update the README to use `--debugger_enabled` and document `/loop-all`.
 - Improve Spotify-to-YouTube resolution and caching performance.

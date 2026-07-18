@@ -108,7 +108,7 @@ class MikuMusicCommands(commands.Cog):
     async def on_voice_state_update(
         self, member: Member, before: VoiceState, after: VoiceState
     ) -> None:
-        if not self.bot.user:
+        if not self.bot.user or member.id != self.bot.user.id:
             return None
         con = self.guildstate_con_dict[member.guild.id]
         if not before.channel and after.channel:
