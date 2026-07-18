@@ -206,6 +206,7 @@ class MikuMusicCommands(commands.Cog):
         gp_con = self.guildstate_con_dict[guild_id]
         if not gp_con.state.songs:
             await reply(interaction, embed=text_only_embed("Queue empty!"))
+            return None
         await gp_con.add_event(gp_con.skip, interaction)
         return None
 
@@ -224,7 +225,7 @@ class MikuMusicCommands(commands.Cog):
 
     @app_commands.command(name="loop", description="Loop current song")
     @app_commands.guild_only()
-    async def loopSong(self, interaction: Interaction) -> None:
+    async def loop_song(self, interaction: Interaction) -> None:
         """
         Usage /loop Loops current song
         """
@@ -234,10 +235,22 @@ class MikuMusicCommands(commands.Cog):
         gp_con = self.guildstate_con_dict[guild_id]
         await gp_con.add_event(gp_con.loop_song, interaction)
 
+    @app_commands.command(name="loop-all", description="Loop current queue")
+    @app_commands.guild_only()
+    async def loop_song_all(self, interaction: Interaction) -> None:
+        """
+        Usage /loop Loops current queue
+        """
+        if not (guild_id := interaction.guild_id):
+            return None
+        await interaction.response.defer()
+        gp_con = self.guildstate_con_dict[guild_id]
+        await gp_con.add_event(gp_con.loop_all, interaction)
+
     @app_commands.command(name="remove", description="Remove song from queue")
     @app_commands.describe(index="Must be a valid number to remove")
     @app_commands.guild_only()
-    async def removeFromQueue(
+    async def remove_from_queue(
         self, interaction: Interaction, index: int
     ) -> None:
         """

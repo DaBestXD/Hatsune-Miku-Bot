@@ -56,7 +56,9 @@ class BotDebugger(commands.Cog):
             title=f"Music info for {guild_name}",
             color=discord.Color.blue(),
         )
-        next_song = gp_con.state.songs[1] if len(gp_con.state.songs) else None
+        next_song = (
+            gp_con.state.songs[1] if len(gp_con.state.songs) > 1 else None
+        )
         embed.add_field(
             name="Playback",
             value=(

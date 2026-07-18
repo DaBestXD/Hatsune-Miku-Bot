@@ -244,7 +244,14 @@ class GuildStateController:
         if not self.state.song_mods.is_song_modified:
             self.state.song_mods.start_timestamp = None
             self.state.song_mods.position_offset_s = 0
-        if not self.state.song_mods.song_loop and self.state.songs:
+        if self.state.song_mods.song_loop_all:
+            if self.state.active_song:
+                if not self.state.song_mods.is_song_modified:
+                    self.state.songs.append(self.state.active_song)
+                self.state.songs.pop(0)
+            else:
+                logger.warning("Doing song loop all no active song was found")
+        elif not self.state.song_mods.song_loop and self.state.songs:
             self.state.songs.pop(0)
         self.state.active_song = (
             self.state.songs[0] if self.state.songs else None
@@ -286,6 +293,7 @@ class GuildStateController:
                 self.state.vc.stop()
             await self.state.vc.disconnect()
         self.state.vc = None
+        self.state.source = None
         self.state.songs = []
         self.state.text_channel = None
         self.state.active_song = None
@@ -314,11 +322,24 @@ class GuildStateController:
         return None
 
     async def loop_song(self, interaction: Interaction):
+        self.state.song_mods.song_loop_all = False
         self.state.song_mods.song_loop = not self.state.song_mods.song_loop
         text = (
             "🔁Now looping current song!🔁"
             if self.state.song_mods.song_loop
             else "No longer looping current song!"
+        )
+        await reply(interaction, embed=text_only_embed(text))
+
+    async def loop_all(self, interaction: Interaction) -> None:
+        self.state.song_mods.song_loop = False
+        self.state.song_mods.song_loop_all = (
+            not self.state.song_mods.song_loop_all
+        )
+        text = (
+            "🔁Now looping queue!🔁"
+            if self.state.song_mods.song_loop_all
+            else "No longer looping queue!"
         )
         await reply(interaction, embed=text_only_embed(text))
 

@@ -26,4 +26,4 @@ COPY src ./src
 RUN uv sync --frozen --no-dev \
   && mkdir -p /app/logs /app/data
 
-CMD ["hatsune-miku-bot", "--docker_enabled"]
+CMD ["hatsune-miku-bot"]

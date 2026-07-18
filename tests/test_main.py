@@ -17,13 +17,11 @@ class ArgumentTests(unittest.TestCase):
             [
                 "hatsune-miku-bot",
                 "--debugger_enabled",
-                "--docker_enabled",
             ],
         ):
             result = entrypoint.args()
 
         self.assertTrue(result.debugger_enabled)
-        self.assertTrue(result.docker_enabled)
 
 
 class MainLifecycleTests(unittest.IsolatedAsyncioTestCase):
