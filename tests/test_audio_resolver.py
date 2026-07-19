@@ -288,7 +288,8 @@ class YtDlpResolverTests(unittest.TestCase):
     def test_get_youtube_info_returns_song_or_playlist(self) -> None:
         track_result = {
             "title": "Track",
-            "url": "https://youtube.test/watch?v=1",
+            "url": None,
+            "original_url": "https://youtube.test/watch?v=1",
             "duration": 60,
             "view_count": 5,
         }
@@ -309,6 +310,9 @@ class YtDlpResolverTests(unittest.TestCase):
             )
 
         self.assertIsInstance(track, Song)
+        self.assertEqual(
+            as_any(track).webpage_url, "https://youtube.test/watch?v=1"
+        )
         self.assertIsInstance(playlist, Playlist)
 
     def test_get_soundcloud_info_accepts_http_mp3_track(self) -> None:

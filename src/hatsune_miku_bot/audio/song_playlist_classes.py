@@ -75,6 +75,20 @@ class Song:
             view_count=str(_info_dict.get("view_count")),
         )
 
+    @classmethod
+    def from_yt_dlp_direct_link(cls, _info_dict: _InfoDict) -> Self:
+        thumbnails = _info_dict.get("thumbnails")
+        thumbnail_url = ""
+        if thumbnails and isinstance(thumbnails, list):
+            thumbnail_url = thumbnails[-1]["url"]
+        return cls(
+            title=str(_info_dict.get("title")),
+            webpage_url=str(_info_dict.get("original_url")),
+            thumbnail_url=thumbnail_url,
+            duration=str(_info_dict.get("duration")),
+            view_count=str(_info_dict.get("view_count")),
+        )
+
     def normalize_song_title(self) -> str:
         """
         To be used only for spotify fuzzy string matching

@@ -77,6 +77,28 @@ class SongTests(unittest.TestCase):
         self.assertEqual(song.thumbnail_url, "https://image.test/large.jpg")
         self.assertEqual(song.view_count, "123")
 
+    def test_from_yt_dlp_direct_link_uses_original_url(self) -> None:
+        song = Song.from_yt_dlp_direct_link(
+            as_any(
+                {
+                    "title": "Tell Your World",
+                    "url": None,
+                    "original_url": "https://youtube.test/watch?v=2",
+                    "duration": 250,
+                    "view_count": 123,
+                    "thumbnails": [
+                        {"url": "https://image.test/small.jpg"},
+                        {"url": "https://image.test/large.jpg"},
+                    ],
+                }
+            )
+        )
+
+        self.assertEqual(song.webpage_url, "https://youtube.test/watch?v=2")
+        self.assertEqual(song.thumbnail_url, "https://image.test/large.jpg")
+        self.assertEqual(song.duration, 250)
+        self.assertEqual(song.view_count, "123")
+
     def test_embeds_include_queue_and_skip_context(self) -> None:
         song = make_song(title="A" * 40)
         next_song = make_song(title="Next Song")

@@ -323,7 +323,7 @@ class AudioInfoResolver:
                     logger.debug("YDL returned page list")
                     return None
                 if not entries:
-                    return Song.from_yt_dlp(result)
+                    return Song.from_yt_dlp_direct_link(result)
                 else:
                     playlist = Playlist.from_yt_dlp(result, entries)
                     if not playlist.songs:
