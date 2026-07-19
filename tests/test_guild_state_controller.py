@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import hatsune_miku_bot.audio.guild_state_controller as controller_module
 from hatsune_miku_bot.audio.guild_state_controller import (
+    Event,
     GuildStateController,
     SongMods,
     _song_mod_to_ffmpeg_str,
@@ -183,7 +184,7 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(vc.play.call_args.args[0], built_source)
         self.assertTrue(callable(vc.play.call_args.kwargs["after"]))
         channel.send.assert_awaited_once()
-        self.assertEqual(controller.queue.qsize(), 1)
+        self.assertEqual(controller.queue.qsize(), 0)
         to_thread.assert_awaited_once()
 
     async def test_begin_playback_resolves_cache_miss(self) -> None:
@@ -212,6 +213,54 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
             "https://audio.test/fresh",
         )
         vc.play.assert_called_once()
+
+    async def test_stale_cache_retry_does_not_announce_or_count_twice(
+        self,
+    ) -> None:
+        controller = make_controller()
+        song = make_song("Cached", "https://song.test/cached")
+        channel = FakeTextChannel()
+        vc = SimpleNamespace(
+            is_playing=Mock(return_value=False),
+            play=Mock(),
+        )
+        controller.state.songs = [song]
+        controller.state.text_channel = as_any(channel)
+        controller.state.vc = as_any(vc)
+        controller.state.song_cache[song.webpage_url] = (
+            "https://audio.test/stale"
+        )
+
+        with (
+            patch.object(
+                controller_module,
+                "get_audio_source",
+                new=AsyncMock(return_value="https://audio.test/fresh"),
+            ),
+            patch.object(
+                controller_module.asyncio,
+                "to_thread",
+                new=AsyncMock(return_value=SimpleNamespace(volume=1.0)),
+            ),
+        ):
+            await controller.begin_playback()
+            await controller.finished_playback("HTTP error 403 Forbidden")
+
+            event = await controller.queue.get()
+            assert isinstance(event, Event)
+            await event.func_to_execute()
+            controller.queue.task_done()
+
+        self.assertEqual(vc.play.call_count, 2)
+        channel.send.assert_awaited_once()
+        as_any(
+            controller.db_logic
+        ).insert_song_playback.assert_awaited_once_with(song, controller.id)
+        self.assertEqual(
+            controller.state.song_cache[song.webpage_url],
+            "https://audio.test/fresh",
+        )
+        self.assertEqual(controller.queue.qsize(), 0)
 
     async def test_begin_playback_skips_unresolvable_song(self) -> None:
         controller = make_controller()

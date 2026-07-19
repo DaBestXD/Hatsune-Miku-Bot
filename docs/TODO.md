@@ -55,20 +55,8 @@
 
 ### CI/CD pipeline improvements
 
-(Medium) [`.github/workflows/deploy.yml:3`]
-
-- Description: CI currently runs only after changes have been pushed to `main` or `dev`, so it cannot act as a required pre-merge check. Because a push to `main` is also the deployment trigger, an unprotected direct push can reach the deployment pipeline before the change has been reviewed.
-- Suggested fix: Add a CI workflow triggered by pull requests targeting `main` and configure a `main` branch protection rule or ruleset that requires a pull request and the CI status check before merging. Block force pushes and branch deletion; keep approvals optional for a single-maintainer repository.
-
-(Medium) [`.github/workflows/deploy.yml:3`]
-
-- Description: The combined workflow considers every push to `main` deployable, including documentation-only changes, resulting in unnecessary VM connections, image builds, and bot restarts.
-- Suggested fix: Separate CI from deployment. Run CI for every pull request, but trigger deployment only for pushes to `main` that change runtime source, dependency manifests, the Docker configuration, or other deployment inputs. Retain `workflow_dispatch` for intentional manual deployments.
-
-(Low) [`.github/workflows/deploy.yml:3`]
-
-- Description: Applying `paths-ignore` to a required pull-request workflow can leave its required status check pending when GitHub skips the workflow, preventing a documentation-only pull request from merging.
-- Suggested fix: Keep a stable required CI check that starts for every pull request. If documentation-only changes should skip expensive tests, use a lightweight change-detection job and have the required final CI gate succeed after either the code checks run successfully or the change is classified as documentation-only; apply path filtering to the deployment workflow instead.
+- Avoid running expensive CI checks or deployments for documentation-only changes. Keep a lightweight required check that always reports success or failure so skipped jobs do not leave pull requests blocked, and filter the deployment workflow to runtime and deployment-related files.
+- Learn and configure GitHub branch protection for `main`. Require changes to arrive through pull requests and require the CI status check before merging; block force pushes and branch deletion. Approvals can remain optional while the repository has a single maintainer.
 
 (Low) [`README.md:36`]
 

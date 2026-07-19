@@ -142,7 +142,7 @@ class GuildStateController:
         await self.add_event(self.begin_song_cache)
 
     # TODO: DOCSTRING
-    async def begin_playback(self) -> None:
+    async def begin_playback(self, cache_expired_restart: bool = False) -> None:
         if not self.state.vc:
             logger.warning("Attempted to play song while not in vc")
             return None
@@ -157,7 +157,8 @@ class GuildStateController:
             return None
         source = self.state.song_cache.get(self.state.active_song.webpage_url)
         if not source:
-            logger.debug("Cache miss, fetching source using ydl")
+            if not cache_expired_restart:
+                logger.debug("Cache miss, fetching source using ydl")
             source = await get_audio_source(self.state.active_song)
             if source:
                 song = self.state.active_song
@@ -208,22 +209,24 @@ class GuildStateController:
         if self.state.song_mods.is_song_modified:
             self.state.song_mods.is_song_modified = False
             return None
-        else:
+        if not cache_expired_restart:
             await self.db_logic.insert_song_playback(
                 self.state.active_song, self.id
             )
-        if self.state.text_channel:
-            next_song = (
-                self.state.songs[1] if len(self.state.songs) >= 2 else None
-            )
-            await self.state.text_channel.send(
-                embed=self.state.active_song.return_embed(next_song)
-            )
+            if self.state.text_channel:
+                next_song = (
+                    self.state.songs[1] if len(self.state.songs) >= 2 else None
+                )
+                await self.state.text_channel.send(
+                    embed=self.state.active_song.return_embed(next_song)
+                )
+            else:
+                logger.warning(
+                    "No text channel was set for %s",
+                    self.begin_playback.__name__,
+                )
         else:
-            logger.warning(
-                "No text channel was set for %s", self.begin_playback.__name__
-            )
-        await self.add_event(self.begin_playback)
+            logger.debug("Recovered from stale cache hit")
 
     def after_callback(
         self, error: Exception | None, stderr_buff: io.BytesIO
@@ -283,7 +286,7 @@ class GuildStateController:
         if not self.state.songs or self.state.songs[0] is not active_song:
             self.state.songs.insert(0, active_song)
         self.state.active_song = active_song
-        await self.add_event(self.begin_playback)
+        await self.add_event(self.begin_playback, cache_expired_restart=True)
         return None
 
     async def skip(self, interaction: Interaction) -> None:

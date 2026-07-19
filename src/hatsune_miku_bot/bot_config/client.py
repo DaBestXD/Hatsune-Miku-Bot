@@ -122,10 +122,10 @@ class Bot(commands.Bot):
                 ephemeral=True,
             )
         else:
+            logger.error("%s", error)
             await reply(
                 interaction, embed=text_only_embed("Error has occured!")
             )
-            logger.error("%s", error)
         return None
 
 
