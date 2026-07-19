@@ -114,6 +114,7 @@ class SpotifyRequestTests(unittest.IsolatedAsyncioTestCase):
         )
         audio_resolver = resolver.AudioInfoResolver(as_any(client))
         audio_resolver.token = "token"
+        audio_resolver.token_expiry = float("inf")
 
         result = await audio_resolver.spotify_get_request(
             "https://api.spotify.test/track/1", {"market": "US"}
