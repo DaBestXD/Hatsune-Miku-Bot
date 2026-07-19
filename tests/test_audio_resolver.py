@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, call, patch
 
 import aiohttp
 from yt_dlp.utils import DownloadError
@@ -157,7 +157,12 @@ class SpotifyRequestTests(unittest.IsolatedAsyncioTestCase):
                 with patch.object(
                     audio_resolver,
                     "spotify_get_request",
-                    new=AsyncMock(side_effect=[metadata, {"items": [item]}]),
+                    new=AsyncMock(
+                        side_effect=[
+                            metadata,
+                            {"items": [item], "next": None},
+                        ]
+                    ),
                 ):
                     result = await audio_resolver.get_spotify_info(
                         path_type, "1"
@@ -167,6 +172,36 @@ class SpotifyRequestTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(is_album, path_type.startswith("album"))
 
         self.assertIsInstance(track, Song)
+
+    async def test_spotify_paginated_request_combines_all_pages(self) -> None:
+        audio_resolver = resolver.AudioInfoResolver(as_any(SimpleNamespace()))
+        first_item = {"name": "First"}
+        second_item = {"name": "Second"}
+        next_url = "https://api.spotify.test/tracks?offset=1"
+        params = {"market": "US"}
+
+        with patch.object(
+            audio_resolver,
+            "spotify_get_request",
+            new=AsyncMock(
+                side_effect=[
+                    {"items": [first_item], "next": next_url},
+                    {"items": [second_item], "next": None},
+                ]
+            ),
+        ) as get_request:
+            result = await audio_resolver.spotify_get_paginated_request(
+                "https://api.spotify.test/tracks", params
+            )
+
+        self.assertEqual(result, {"items": [first_item, second_item]})
+        self.assertEqual(
+            get_request.await_args_list,
+            [
+                call("https://api.spotify.test/tracks", params),
+                call(next_url, {}),
+            ],
+        )
 
 
 class ResolverRoutingTests(unittest.IsolatedAsyncioTestCase):

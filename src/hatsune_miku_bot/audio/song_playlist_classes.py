@@ -173,8 +173,6 @@ class Playlist:
         playlist_url: str = "None",
         playlist_thumbnail: str = "None",
     ) -> None:
-        if not songs:
-            raise ValueError("Songs cannot be none for a playlist")
         self.playlist_title = playlist_title
         self.playlist_url = playlist_url
         self.playlist_thumbnail = playlist_thumbnail

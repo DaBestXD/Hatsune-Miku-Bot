@@ -77,6 +77,29 @@ class AudioInfoResolver:
         self.token_expiry: float = -1
         self.client = client
 
+    async def spotify_get_paginated_request(
+        self,
+        link: str,
+        params: dict[str, str],
+    ) -> dict[str, Any] | None:
+        items: list[dict[str, Any]] = []
+        next_link: str | None = link
+        next_params = params
+
+        # no get used/or typing checks, fail fast to alert for json changes
+        while next_link:
+            page = await self.spotify_get_request(next_link, next_params)
+            if not page:
+                return None
+            page_items = page["items"]
+            items.extend(item for item in page_items if isinstance(item, dict))
+            next_value = page["next"]
+            next_link = next_value
+            next_params = {}
+        if not items:
+            return None
+        return {"items": items}
+
     async def get_token(self, max_attempts: int = 3) -> None:
         if not self.client_id or not self.client_secret:
             logger.warning("Attempted to play spotify song without credentials")
@@ -142,7 +165,7 @@ class AudioInfoResolver:
     async def spotify_get_request(
         self, link: str, params: dict[str, str], max_attempts: int = 3
     ) -> dict[str, Any] | None:
-        if not self.token:
+        if not self.token or self.token_expiry <= time.time():
             await self.get_token()
         if not self.token:
             return None
@@ -202,7 +225,7 @@ class AudioInfoResolver:
                     "Failed to get metadata response back for %s[Album]", id
                 )
                 return None
-            song_information = await self.spotify_get_request(
+            song_information = await self.spotify_get_paginated_request(
                 SP_ALBUM_LINK + id + "/tracks",
                 params=SP_ALBUM_SONG_METADATA,
             )
@@ -211,12 +234,15 @@ class AudioInfoResolver:
                     "Failed to get song information back for %s[Album]", id
                 )
                 return None
-            return Playlist.from_spotify(
+            playlist = Playlist.from_spotify(
                 path_type,
                 container_metadata,
                 song_information,
                 is_album=True,
             )
+            if not playlist.songs:
+                return None
+            return playlist
 
         if "playlist/" in path_type:
             container_metadata = await self.spotify_get_request(
@@ -228,7 +254,7 @@ class AudioInfoResolver:
                     "Failed to get metadata response back for %s[Playlist]", id
                 )
                 return None
-            song_information = await self.spotify_get_request(
+            song_information = await self.spotify_get_paginated_request(
                 SP_PLAYLIST_LINK + id + "/tracks",
                 params=SP_PLAYLIST_SONG_METADATA,
             )
@@ -237,12 +263,16 @@ class AudioInfoResolver:
                     "Failed to get song information back for %s[Playlist]", id
                 )
                 return None
-            return Playlist.from_spotify(
+            playlist = Playlist.from_spotify(
                 path_type,
                 container_metadata,
                 song_information,
                 is_album=False,
             )
+            if not playlist.songs:
+                return None
+            return playlist
+
         if "track/" in path_type:
             song = await self.spotify_get_request(
                 SP_TRACK_LINK + id,
@@ -318,17 +348,19 @@ class AudioInfoResolver:
         try:
             with YoutubeDL(params=YDL_OPTS) as ydl:
                 result = ydl.extract_info(url, download=False, process=False)
+                if "entries" not in result:
+                    return Song.from_yt_dlp_direct_link(result)
                 entries = result.get("entries")
                 if isinstance(entries, PagedList):
-                    logger.debug("YDL returned page list")
+                    logger.debug("YDL returned page list for %s", url)
                     return None
-                if not entries:
-                    return Song.from_yt_dlp_direct_link(result)
-                else:
-                    playlist = Playlist.from_yt_dlp(result, entries)
-                    if not playlist.songs:
-                        return None
-                    return playlist
+                if entries is None:
+                    logger.debug("Entries returned none for %s", url)
+                    return None
+                playlist = Playlist.from_yt_dlp(result, entries)
+                if not playlist.songs:
+                    return None
+                return playlist
         except DownloadError as e:
             logger.error("%s", e)
             return None

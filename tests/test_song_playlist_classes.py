@@ -115,9 +115,15 @@ class SongTests(unittest.TestCase):
 
 
 class PlaylistTests(unittest.TestCase):
-    def test_playlist_requires_songs_and_summarizes_duration(self) -> None:
-        with self.assertRaisesRegex(ValueError, "Songs cannot be none"):
-            Playlist([])
+    def test_playlist_supports_empty_songs_and_summarizes_duration(
+        self,
+    ) -> None:
+        empty = Playlist([])
+
+        self.assertEqual(empty.songs, [])
+        self.assertEqual(empty.length, 0)
+        self.assertEqual(empty.total_duration, 0)
+        self.assertEqual(empty.formatted_duration, "00:00:00")
 
         playlist = Playlist(
             [make_song(duration="60"), make_song(duration="120")],

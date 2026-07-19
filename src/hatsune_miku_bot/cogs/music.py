@@ -365,19 +365,19 @@ class MikuMusicCommands(commands.Cog):
         return None
 
     @app_commands.command(
-        name="speed", description="Change the song speed from 00.1 -> 2.0"
+        name="speed", description="Change the song speed from 0.5 -> 2.0"
     )
     @app_commands.describe(
-        effect_strength="Select a value between 0.01 -> 2.0(default value is 1)"
+        effect_strength="Select a value between 0.5 -> 2.0(default value is 1)"
     )
     @app_commands.guild_only()
     async def speed(
         self,
         interaction: Interaction,
-        effect_strength: app_commands.Range[float, 0.01, 2.0],
+        effect_strength: app_commands.Range[float, 0.5, 2.0],
     ):
         """
-        Usage /speed [0.01, 2.0]
+        Usage /speed [0.5, 2.0]
         """
         if not (guild_id := interaction.guild_id):
             return None

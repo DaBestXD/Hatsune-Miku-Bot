@@ -5,6 +5,25 @@
 User-facing changes and developer-facing internal changes are tracked together.
 Dates are listed without release versions for now.
 
+## 2026-07-19
+
+### Changed
+
+- Limited `/speed` to FFmpeg's supported `0.5` to `2.0` range.
+- Allowed empty `Playlist` objects so resolvers can handle empty collections without raising an exception.
+
+### Fixed
+
+- Fixed direct YouTube links so their original webpage URL is retained when metadata is extracted without processing.
+- Fixed YouTube playlist detection so direct links, populated playlists, and empty playlists are handled separately.
+- Fixed Spotify token handling so expired access tokens are refreshed before API requests.
+- Restored pagination for Spotify albums and playlists so every tracks page is collected.
+- Prevented Spotify albums and playlists with no usable songs from being queued as successful results.
+
+### Internal
+
+- Added regression coverage for direct YouTube metadata, empty playlist summaries, and multi-page Spotify responses.
+
 ## 2026-07-18
 
 ### Added
