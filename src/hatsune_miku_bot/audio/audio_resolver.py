@@ -422,7 +422,6 @@ def _get_audio_source_impl(query: Song) -> str | None:
                     query.title,
                     query.webpage_url.replace("https://", ""),
                 )
-                query.webpage_url = query.webpage_url
                 return result.get("url")
     except DownloadError as e:
         logger.error("Audio source download error: %s", e)
