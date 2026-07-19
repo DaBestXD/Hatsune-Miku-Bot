@@ -377,7 +377,8 @@ class GuildStateController:
         self.state.song_mods.is_song_modified = True
         if self.state.vc and self.state.active_song:
             # Steps to modify song insert copy of song into queue
-            self.state.songs.insert(1, self.state.active_song)
+            if not self.state.song_mods.song_loop:
+                self.state.songs.insert(1, self.state.active_song)
             self.state.vc.stop()
         else:
             logger.warning("Attempted to modify song without an active song")

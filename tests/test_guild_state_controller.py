@@ -484,6 +484,35 @@ class SongModificationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(controller.state.songs.count(song), 4)
         self.assertEqual(vc.stop.call_count, 3)
 
+    async def test_effect_restart_does_not_duplicate_single_loop_queue(
+        self,
+    ) -> None:
+        controller = make_controller()
+        first = make_song("First", "https://song.test/1")
+        second = make_song("Second", "https://song.test/2")
+        vc = SimpleNamespace(stop=Mock())
+        controller.state.songs = [first, second]
+        controller.state.active_song = first
+        controller.state.vc = as_any(vc)
+        controller.state.song_mods.song_loop = True
+        controller.state.song_mods.start_timestamp = 100.0
+
+        with (
+            patch.object(controller_module, "reply", new=AsyncMock()),
+            patch.object(
+                controller_module.time, "monotonic", return_value=110.0
+            ),
+        ):
+            await controller.nightcore(as_any(object()))
+
+        await controller.finished_playback("")
+
+        self.assertEqual(controller.state.songs, [first, second])
+        self.assertIs(controller.state.active_song, first)
+        self.assertEqual(controller.state.songs.count(first), 1)
+        vc.stop.assert_called_once_with()
+        self.assertEqual(controller.queue.qsize(), 1)
+
     async def test_song_effect_restart_is_not_logged_as_new_playback(
         self,
     ) -> None:

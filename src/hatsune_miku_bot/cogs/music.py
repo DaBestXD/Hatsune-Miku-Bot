@@ -408,6 +408,14 @@ class MikuMusicCommands(commands.Cog):
             f"{position}. {title}: {total_plays} plays"
             for position, (title, total_plays) in enumerate(songs, start=1)
         ]
+        if not _str_songs:
+            await reply(
+                interaction,
+                embed=text_only_embed(
+                    "No songs played yet, go play some songs first!"
+                ),
+            )
+            return None
 
         embed = code_block_embed(_str_songs, "Most songs played")
         await reply(interaction, embed=embed)
