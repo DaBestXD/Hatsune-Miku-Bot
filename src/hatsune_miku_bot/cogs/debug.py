@@ -13,6 +13,11 @@ from hatsune_miku_bot.utils.discord_helpers import (
     text_only_embed,
 )
 
+if not GUILD_OBJECT:
+    raise RuntimeError(
+        "No guild id was provided so guild object was set to none"
+    )
+
 
 class BotDebugger(commands.Cog):
     """

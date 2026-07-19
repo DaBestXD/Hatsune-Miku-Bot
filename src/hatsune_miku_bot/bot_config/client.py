@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from typing import override
 
 import discord
 from discord import Interaction
@@ -67,6 +68,7 @@ class Bot(commands.Bot):
                 "Unexpected sync error guild: %s, (%d)", guild.name, guild.id
             )
 
+    @override
     async def setup_hook(self) -> None:
         if self.debugger_on:
             if not USER_ID or not GUILD_ID:

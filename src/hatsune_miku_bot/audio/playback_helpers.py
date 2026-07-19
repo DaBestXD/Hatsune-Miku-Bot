@@ -29,7 +29,7 @@ def build_audio(
     stderr_buf: io.BytesIO,
     seek_time: float = 0,
     opts: str = "",
-) -> PCMVolumeTransformer:
+) -> PCMVolumeTransformer[FFmpegPCMAudio]:
     opts = FFMPEG_OPTS["options"] + opts
     before_opts = FFMPEG_OPTS["before_options"] + f" -ss {seek_time}"
     pcmaud = FFmpegPCMAudio(

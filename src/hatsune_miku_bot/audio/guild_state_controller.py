@@ -7,7 +7,13 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from discord import Interaction, PCMVolumeTransformer, TextChannel, VoiceClient
+from discord import (
+    FFmpegPCMAudio,
+    Interaction,
+    PCMVolumeTransformer,
+    TextChannel,
+    VoiceClient,
+)
 from discord.ext import commands
 
 from hatsune_miku_bot.audio.audio_resolver import get_audio_source
@@ -25,7 +31,7 @@ class GuildStateController:
         self.bot = bot
         self.queue: asyncio.Queue[Event | StopEvent] = asyncio.Queue()
         self.state = GuildPlaybackState()
-        self.task: asyncio.Task | None = None
+        self.task: asyncio.Task[None] | None = None
         self.db_logic = db_logic
 
     async def add_event[**P](
@@ -524,7 +530,7 @@ class GuildPlaybackState:
     Key is webpage_url, value is the source
     """
     song_mods: SongMods = field(default_factory=SongMods)
-    source: PCMVolumeTransformer | None = None
+    source: PCMVolumeTransformer[FFmpegPCMAudio] | None = None
     text_channel: TextChannel | None = None
     vc: VoiceClient | None = None
 

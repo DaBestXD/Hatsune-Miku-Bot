@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import override
 
 from aiohttp import ClientSession, ClientTimeout
 from discord import (
@@ -45,6 +46,7 @@ class MikuMusicCommands(commands.Cog):
         self.audio_info_resolver: AudioInfoResolver | None = None
         self.db_logic = db_logic
 
+    @override
     async def cog_load(self) -> None:
         """
         Cog loading and unloading would only be caused by debugging commands
@@ -56,6 +58,7 @@ class MikuMusicCommands(commands.Cog):
         else:
             logger.debug("Audio session already created")
 
+    @override
     async def cog_unload(self) -> None:
         # Blah blah doesn't stop all instances blah blah
         if self.audio_session and not self.audio_session.closed:

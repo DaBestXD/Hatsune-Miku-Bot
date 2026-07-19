@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 import discord
 from discord import Color, Interaction, VoiceClient, ui
@@ -122,7 +122,9 @@ class QueueView(ui.View):
     @discord.ui.button(
         emoji="⬅️", style=discord.ButtonStyle.secondary, disabled=True
     )
-    async def page_back(self, interaction: Interaction, button: ui.Button):
+    async def page_back(
+        self, interaction: Interaction, button: ui.Button[QueueView]
+    ):
         if not (guild_id := interaction.guild_id):
             return None
         gp_con = self.miku.guildstate_con_dict[guild_id]
@@ -137,7 +139,9 @@ class QueueView(ui.View):
     @discord.ui.button(
         emoji="➡️", style=discord.ButtonStyle.secondary, disabled=True
     )
-    async def page_right(self, interaction: Interaction, button: ui.Button):
+    async def page_right(
+        self, interaction: Interaction, button: ui.Button[QueueView]
+    ):
         if not (guild_id := interaction.guild_id):
             return None
         gp_con = self.miku.guildstate_con_dict[guild_id]
@@ -152,7 +156,9 @@ class QueueView(ui.View):
     @discord.ui.button(
         emoji="🔀", style=discord.ButtonStyle.secondary, disabled=False
     )
-    async def button_shuffle(self, interaction: Interaction, button: ui.Button):
+    async def button_shuffle(
+        self, interaction: Interaction, button: ui.Button[QueueView]
+    ):
         if not (guild_id := interaction.guild_id):
             return None
         await interaction.response.defer()
@@ -169,7 +175,7 @@ class QueueView(ui.View):
         disabled=False,
     )
     async def button_night_core(
-        self, interaction: Interaction, button: ui.Button
+        self, interaction: Interaction, button: ui.Button[QueueView]
     ):
         if not (guild_id := interaction.guild_id):
             return None
@@ -187,7 +193,9 @@ class QueueView(ui.View):
     @discord.ui.button(
         label="STOP", style=discord.ButtonStyle.success, disabled=False
     )
-    async def button_stop(self, interaction: Interaction, button: ui.Button):
+    async def button_stop(
+        self, interaction: Interaction, button: ui.Button[QueueView]
+    ):
         if not (guild_id := interaction.guild_id):
             return None
         await interaction.response.defer()
@@ -199,6 +207,7 @@ class QueueView(ui.View):
             await self.message.edit(view=self)
         await gp_con.add_event(gp_con.stop_playback, interaction)
 
+    @override
     async def on_timeout(self):
         if self.message:
             for item in self.children:

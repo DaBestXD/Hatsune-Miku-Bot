@@ -1,3 +1,4 @@
+<!-- markdownlint-disable -->
 # TODO
 
 - Implement deterministic Spotify-to-YouTube fuzzy matching based on the song !HALF-DONE!

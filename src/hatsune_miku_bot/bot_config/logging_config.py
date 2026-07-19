@@ -16,6 +16,7 @@ class ColorFormatter(logging.Formatter):
         "DEBUG": "\033[37m",  # gray
     }
 
+    @typing.override
     def format(self, record):
         original = record.levelname
         color = self.COLORS.get(original, "")
