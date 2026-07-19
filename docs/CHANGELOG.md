@@ -11,6 +11,7 @@ Dates are listed without release versions for now.
 
 - Limited `/speed` to FFmpeg's supported `0.5` to `2.0` range.
 - Allowed empty `Playlist` objects so resolvers can handle empty collections without raising an exception.
+- Reduced Spotify-to-YouTube resolution time by stopping YouTube Music searches after the first three candidates instead of exhausting every result page.
 
 ### Fixed
 

@@ -6,6 +6,7 @@ import random
 import re
 import time
 from difflib import SequenceMatcher
+from itertools import islice
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote_plus
 
@@ -412,7 +413,10 @@ def _get_spotify_source_impl(query: Song) -> str | None:
         if not entries or isinstance(entries, PagedList):
             logger.debug("Entries returned none or PagedList")
             return None
-        songs = [Song.from_yt_dlp(e) for e in entries][:3]
+        songs = [
+            Song.from_yt_dlp(entry)
+            for entry in islice(filter(None, entries), 3)
+        ]
         if not songs:
             logger.warning(
                 "No songs returned for %s[%s]",
