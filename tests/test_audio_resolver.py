@@ -256,12 +256,53 @@ class ResolverRoutingTests(unittest.IsolatedAsyncioTestCase):
             await audio_resolver.get_song_info("https://example.test/song")
         )
 
+        with patch.object(
+            resolver.asyncio, "to_thread", new=AsyncMock()
+        ) as to_thread:
+            self.assertIsNone(
+                await audio_resolver.get_song_info(
+                    "https://on.soundcloud.com/short-link"
+                )
+            )
+            to_thread.assert_not_awaited()
+
 
 class YtDlpResolverTests(unittest.TestCase):
     def setUp(self) -> None:
         self.audio_resolver = resolver.AudioInfoResolver(
             as_any(SimpleNamespace())
         )
+
+    def test_restricted_extractors_reject_untrusted_provider_hosts(
+        self,
+    ) -> None:
+        cases = (
+            (
+                resolver.YOUTUBE_INFO_PARAMS,
+                "https://youtube.attacker.example/watch?v=dQw4w9WgXcQ",
+            ),
+            (
+                resolver.SOUNDCLOUD_INFO_PARAMS,
+                "https://soundcloud.attacker.example/miku/track",
+            ),
+            (
+                resolver.SOUNDCLOUD_INFO_PARAMS,
+                "https://on.soundcloud.com/short-link",
+            ),
+        )
+
+        for params, url in cases:
+            with (
+                self.subTest(url=url),
+                resolver.YoutubeDL(params=params) as ydl,
+            ):
+                matching_extractors = [
+                    extractor.IE_NAME
+                    for extractor in as_any(ydl)._ies.values()
+                    if extractor.suitable(url)
+                ]
+
+                self.assertEqual(matching_extractors, ["UnsupportedURL"])
 
     def test_search_query_selects_playable_song_with_most_views(self) -> None:
         ydl = MagicMock()
@@ -292,7 +333,7 @@ class YtDlpResolverTests(unittest.TestCase):
 
         self.assertIsNotNone(result)
         self.assertEqual(as_any(result).title, "Higher")
-        ydl_class.assert_called_once_with(params=resolver.YDL_OPTS)
+        ydl_class.assert_called_once_with(params=resolver.SEARCH_PARAMS)
         ydl.extract_info.assert_called_once_with(
             "ytsearch3:world is mine", download=False, process=False
         )
@@ -337,7 +378,9 @@ class YtDlpResolverTests(unittest.TestCase):
         ydl = MagicMock()
         ydl.extract_info.side_effect = [track_result, playlist_result]
 
-        with patch.object(resolver, "YoutubeDL", return_value=ydl_context(ydl)):
+        with patch.object(
+            resolver, "YoutubeDL", return_value=ydl_context(ydl)
+        ) as ydl_class:
             track = self.audio_resolver.get_youtube_info(
                 "https://youtube.test/1"
             )
@@ -350,24 +393,40 @@ class YtDlpResolverTests(unittest.TestCase):
             as_any(track).webpage_url, "https://youtube.test/watch?v=1"
         )
         self.assertIsInstance(playlist, Playlist)
+        self.assertEqual(
+            ydl_class.call_args_list,
+            [
+                call(params=resolver.YOUTUBE_INFO_PARAMS),
+                call(params=resolver.YOUTUBE_INFO_PARAMS),
+            ],
+        )
 
     def test_get_soundcloud_info_accepts_http_mp3_track(self) -> None:
         ydl = MagicMock()
         ydl.extract_info.return_value = {
             "title": "SoundCloud Track",
-            "url": "https://soundcloud.test/stream",
+            "url": "https://cf-media.sndcdn.test/stream",
+            "webpage_url": "https://soundcloud.com/miku/track",
             "duration": 90,
             "view_count": 8,
             "formats": [{"format_id": "http_mp3_128"}],
         }
 
-        with patch.object(resolver, "YoutubeDL", return_value=ydl_context(ydl)):
+        with patch.object(
+            resolver, "YoutubeDL", return_value=ydl_context(ydl)
+        ) as ydl_class:
             result = self.audio_resolver.get_soundcloud_info(
                 "https://soundcloud.com/miku/track"
             )
 
         self.assertIsInstance(result, Song)
         self.assertEqual(as_any(result).title, "SoundCloud Track")
+        self.assertEqual(
+            as_any(result).webpage_url, "https://soundcloud.com/miku/track"
+        )
+        ydl_class.assert_called_once_with(
+            params=resolver.SOUNDCLOUD_INFO_PARAMS
+        )
 
     def test_download_errors_return_none(self) -> None:
         ydl = MagicMock()
@@ -379,7 +438,7 @@ class YtDlpResolverTests(unittest.TestCase):
     def test_non_spotify_audio_source_is_resolved_without_network(self) -> None:
         song = Song(
             "Miku",
-            "https://youtube.test/watch?v=1",
+            "https://youtube.com/watch?v=1",
             "https://image.test/1.jpg",
             "60",
             "1",
@@ -393,7 +452,59 @@ class YtDlpResolverTests(unittest.TestCase):
             result = resolver._get_audio_source_impl(song)
 
         self.assertEqual(result, "https://audio.test/stream")
-        ydl_class.assert_called_once_with(resolver.AUDIO_OPTS)
+        ydl_class.assert_called_once_with(resolver.YOUTUBE_AUDIO_PARAMS)
         ydl.extract_info.assert_called_once_with(
-            url="https://youtube.test/watch?v=1", download=False
+            url="https://youtube.com/watch?v=1", download=False
+        )
+
+    def test_soundcloud_audio_uses_track_only_params(self) -> None:
+        song = Song(
+            "Miku",
+            "https://soundcloud.com/miku/track",
+            "https://image.test/1.jpg",
+            "60",
+            "1",
+        )
+        ydl = MagicMock()
+        ydl.extract_info.return_value = {"url": "https://audio.test/stream"}
+
+        with patch.object(
+            resolver, "YoutubeDL", return_value=ydl_context(ydl)
+        ) as ydl_class:
+            result = resolver._get_audio_source_impl(song)
+
+        self.assertEqual(result, "https://audio.test/stream")
+        ydl_class.assert_called_once_with(resolver.SOUNDCLOUD_AUDIO_PARAMS)
+
+    def test_spotify_source_uses_search_then_youtube_audio_params(self) -> None:
+        query = spotify_song()
+        search_ydl = MagicMock()
+        search_ydl.extract_info.return_value = {
+            "entries": [
+                {
+                    "title": query.title,
+                    "url": "https://youtube.com/watch?v=1",
+                    "view_count": 10,
+                }
+            ]
+        }
+        audio_ydl = MagicMock()
+        audio_ydl.extract_info.return_value = {
+            "url": "https://audio.test/stream"
+        }
+
+        with patch.object(
+            resolver,
+            "YoutubeDL",
+            side_effect=[ydl_context(search_ydl), ydl_context(audio_ydl)],
+        ) as ydl_class:
+            result = resolver._get_spotify_source_impl(query)
+
+        self.assertEqual(result, "https://audio.test/stream")
+        self.assertEqual(
+            ydl_class.call_args_list,
+            [
+                call(resolver.SPOTIFY_SEARCH_PARAMS),
+                call(resolver.YOUTUBE_AUDIO_PARAMS),
+            ],
         )

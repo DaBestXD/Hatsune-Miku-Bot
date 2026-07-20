@@ -69,7 +69,11 @@ class Song:
             thumbnail_url = thumbnails[-1]["url"]
         return cls(
             title=str(_info_dict.get("title")),
-            webpage_url=str(_info_dict.get("url")),
+            webpage_url=str(
+                _info_dict.get("webpage_url")
+                or _info_dict.get("original_url")
+                or _info_dict.get("url")
+            ),
             thumbnail_url=thumbnail_url,
             duration=str(_info_dict.get("duration")),
             view_count=str(_info_dict.get("view_count")),

@@ -8,11 +8,6 @@
 
 ## Code review findings
 
-(High) [`src/hatsune_miku_bot/audio/audio_resolver.py:385`]
-
-- Description: Media-provider routing uses hostname substring checks, so an attacker-controlled hostname such as `youtube.attacker.example` can reach yt-dlp's generic extractor and make requests from the bot's network position. Git history shows this behavior predates the current changes.
-- Suggested fix: Parse the URL and allow only exact trusted provider hostnames or validated subdomains. Add `allowed_extractors = ["youtube.*", "soundcloud.*", "end"]` as a second layer after fixing the SoundCloud URL handling described below.
-
 (Medium) [`src/hatsune_miku_bot/audio/guild_state_controller.py:380`]
 
 - Description: Modifier commands received before the asynchronous stop callback each insert another active-song copy and repeatedly count the same elapsed playback interval. Rapid nightcore, bass, and speed changes can repeat the song and seek too far forward.
@@ -23,10 +18,6 @@
 - Description: A 403 immediately after an effect change enters stale-source recovery before the modified-playback queue transition, leaving the inserted active-song copy to play again.
 - Suggested fix: Have stale-source recovery consume or collapse a pending modifier restart, or remove the queue-copy restart design.
 
-(Medium) [`src/hatsune_miku_bot/audio/audio_resolver.py:305`]
-
-- Description: SoundCloud metadata stores yt-dlp's processed `url`, which is generally a temporary media/CDN URL rather than the stable SoundCloud webpage. This can break later cache refresh, 403 recovery, and an `allowed_extractors` restriction on `AUDIO_OPTS`.
-- Suggested fix: Preserve `webpage_url` or `original_url` for SoundCloud songs and fall back to `url` only when necessary. Decide whether `on.soundcloud.com` short links should be resolved explicitly or rejected.
 
 (Medium) [`src/hatsune_miku_bot/audio/audio_resolver.py:185`]
 

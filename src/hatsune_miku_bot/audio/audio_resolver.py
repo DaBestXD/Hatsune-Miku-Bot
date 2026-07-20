@@ -8,7 +8,7 @@ import time
 from difflib import SequenceMatcher
 from itertools import islice
 from typing import TYPE_CHECKING, Any
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 
 import aiohttp
 from yt_dlp import YoutubeDL
@@ -43,28 +43,34 @@ SP_ALBUM_METADATA = {
 SP_ALBUM_LINK = "https://api.spotify.com/v1/albums/"
 SP_TRACK_LINK = "https://api.spotify.com/v1/tracks/"
 SP_PLAYLIST_LINK = "https://api.spotify.com/v1/playlists/"
-YDL_OPTS: _Params = {
-    "default_search": "ytsearch2",
+YOUTUBE_INFO_PARAMS: _Params = {
+    "allowed_extractors": ["youtube", "youtube:tab", "end"],
     "js_runtimes": {"node": {}},
-    "extract_flat": "in_playlist",
-    "remote_components": {"ejs:github"},
     "quiet": True,
     "extractor_args": {"youtube": {"skip": ["hls", "dash", "translated_subs"]}},
 }
-AUDIO_OPTS: _Params = {
-    "format": "bestaudio/best",
-    "js_runtimes": {"node": {}},
-    "default_search": "ytsearch2",
-    "remote_components": {"ejs:github"},
-    "noplaylist": True,
-    "playlist_items": "1-2",
+SEARCH_PARAMS: _Params = {
+    "allowed_extractors": ["youtube:search", "end"],
     "quiet": True,
 }
-SPOTIFY_SEARCH_OPTS: _Params = {
-    "default_search": f"ytsearch{3}",
+SOUNDCLOUD_INFO_PARAMS: _Params = {
+    "allowed_extractors": ["soundcloud", "end"],
+    "quiet": True,
+}
+SPOTIFY_SEARCH_PARAMS: _Params = {
+    "allowed_extractors": ["youtube:music:search_url", "end"],
+    "quiet": True,
+}
+YOUTUBE_AUDIO_PARAMS: _Params = {
+    "allowed_extractors": ["youtube", "end"],
+    "format": "bestaudio/best",
     "js_runtimes": {"node": {}},
-    "extract_flat": "in_playlist",
-    "remote_components": {"ejs:github"},
+    "noplaylist": True,
+    "quiet": True,
+}
+SOUNDCLOUD_AUDIO_PARAMS: _Params = {
+    "allowed_extractors": ["soundcloud", "end"],
+    "format": "bestaudio/best",
     "noplaylist": True,
     "quiet": True,
 }
@@ -185,9 +191,15 @@ class AudioInfoResolver:
         except aiohttp.ClientResponseError as e:
             logger.error("Spotify get request error: %d", e.status)
             if e.status >= 500:
-                logger.info("%s retrying...", e.status)
+                logger.debug("%s retrying...", e.status)
                 # One second sleep time should be fine for now
                 await asyncio.sleep(1)
+                return await self.spotify_get_request(
+                    link, params, max_attempts - 1
+                )
+            if e.status == 401:
+                logger.debug("Token reject during token requesting new token")
+                await self.get_token()
                 return await self.spotify_get_request(
                     link, params, max_attempts - 1
                 )
@@ -291,7 +303,7 @@ class AudioInfoResolver:
             logger.info("Soundcloud playlist was entered")
             return None
         try:
-            with YoutubeDL(params=YDL_OPTS) as ydl:
+            with YoutubeDL(params=SOUNDCLOUD_INFO_PARAMS) as ydl:
                 result = ydl.extract_info(url, download=False)
                 restricted = True
                 formats = result.get("formats")
@@ -319,7 +331,7 @@ class AudioInfoResolver:
         Returns a Song with the greatest view count
         """
         try:
-            with YoutubeDL(params=YDL_OPTS) as ydl:
+            with YoutubeDL(params=SEARCH_PARAMS) as ydl:
                 result = ydl.extract_info(
                     f"ytsearch3:{query}", download=False, process=False
                 )
@@ -347,7 +359,7 @@ class AudioInfoResolver:
         # have only expected one song(Retard protection)
         # Unsure if I want to keep this feature removed
         try:
-            with YoutubeDL(params=YDL_OPTS) as ydl:
+            with YoutubeDL(params=YOUTUBE_INFO_PARAMS) as ydl:
                 result = ydl.extract_info(url, download=False, process=False)
                 if "entries" not in result:
                     return Song.from_yt_dlp_direct_link(result)
@@ -375,6 +387,9 @@ class AudioInfoResolver:
             return await asyncio.to_thread(self.search_query, url)
         url_domain = grouped_url.group(1)
         url_path = grouped_url.group(2)
+        if url_domain == "on.soundcloud.com/":
+            logger.info("SoundCloud short links are not supported")
+            return None
         if "spotify" in url_domain:
             re_groups = re.match(
                 r"(track/|playlist/|album/)(\w+)(?:\?|$)", url_path
@@ -403,7 +418,7 @@ def rank_spotify_search_results(songs: list[Song], query: Song) -> Song:
 
 
 def _get_spotify_source_impl(query: Song) -> str | None:
-    with YoutubeDL(SPOTIFY_SEARCH_OPTS) as ydl:
+    with YoutubeDL(SPOTIFY_SEARCH_PARAMS) as ydl:
         result = ydl.extract_info(
             f"https://music.youtube.com/search?q={quote_plus(query.title)}#songs",
             download=False,
@@ -432,7 +447,7 @@ def _get_spotify_source_impl(query: Song) -> str | None:
                 query.webpage_url,
             )
             return None
-        with YoutubeDL(AUDIO_OPTS) as ydl:
+        with YoutubeDL(YOUTUBE_AUDIO_PARAMS) as ydl:
             resolved = ydl.extract_info(
                 url=end_song.webpage_url, download=False
             )
@@ -450,15 +465,22 @@ def _get_audio_source_impl(query: Song) -> str | None:
     try:
         if "spotify" in query.webpage_url:
             return _get_spotify_source_impl(query)
+        hostname = urlparse(query.webpage_url).hostname
+        if not hostname:
+            logger.debug("Hostname was none for %s", query)
+            return None
+        if "soundcloud" in hostname:
+            params = SOUNDCLOUD_AUDIO_PARAMS
         else:
-            with YoutubeDL(AUDIO_OPTS) as ydl:
-                result = ydl.extract_info(url=query.webpage_url, download=False)
-                logger.info(
-                    "Loaded audio for non-spotify link: %s, %s",
-                    query.title,
-                    query.webpage_url.replace("https://", ""),
-                )
-                return result.get("url")
+            params = YOUTUBE_AUDIO_PARAMS
+        with YoutubeDL(params) as ydl:
+            result = ydl.extract_info(url=query.webpage_url, download=False)
+            logger.info(
+                "Loaded audio for non-spotify link: %s, %s",
+                query.title,
+                query.webpage_url.replace("https://", ""),
+            )
+            return result.get("url")
     except DownloadError as e:
         logger.error("Audio source download error: %s", e)
         return None
