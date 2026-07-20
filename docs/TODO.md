@@ -58,11 +58,6 @@
 - Avoid running expensive CI checks or deployments for documentation-only changes. Keep a lightweight required check that always reports success or failure so skipped jobs do not leave pull requests blocked, and filter the deployment workflow to runtime and deployment-related files.
 - Learn and configure GitHub branch protection for `main`. Require changes to arrive through pull requests and require the CI status check before merging; block force pushes and branch deletion. Approvals can remain optional while the repository has a single maintainer.
 
-(Low) [`README.md:36`]
-
-- Description: The README documents `/speed` as accepting `0.01-2.0`, while the command and changelog use the supported `0.5-2.0` range.
-- Suggested fix: Change the README lower bound to `0.5`.
-
 ### Test coverage gaps
 
 (Medium) [`tests/test_audio_resolver.py:52`]

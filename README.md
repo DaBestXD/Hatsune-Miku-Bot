@@ -33,7 +33,7 @@ SoundCloud playlists are not currently supported.
 - `/volume <0.0-2.0>`: Set playback volume.
 - `/night-core`: Toggle the nightcore effect.
 - `/bass-boost <float>`: Apply a bass boost value.
-- `/speed <0.01-2.0>`: Change playback speed.
+- `/speed <0.5-2.0>`: Change playback speed.
 - `/song-tracker`: Show the top played songs for the current server.
 
 ### Utility

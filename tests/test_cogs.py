@@ -5,13 +5,6 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
-import discord
-
-import hatsune_miku_bot.bot_config.constants as constants
-
-if not hasattr(constants, "GUILD_OBJECT"):
-    constants.GUILD_OBJECT = discord.Object(id=1)
-
 import hatsune_miku_bot.cogs.debug as debug_module
 import hatsune_miku_bot.cogs.music as music_module
 import hatsune_miku_bot.cogs.utility as utility_module
