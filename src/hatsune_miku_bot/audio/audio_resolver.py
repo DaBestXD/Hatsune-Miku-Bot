@@ -189,22 +189,32 @@ class AudioInfoResolver:
                 res.raise_for_status()
                 return await res.json()
         except aiohttp.ClientResponseError as e:
-            logger.error("Spotify get request error: %d", e.status)
+            if max_attempts <= 1:
+                logger.warning("Spotify request retry budget exhausted")
+                return None
+            if e.status < 500 and e.status not in (401, 429):
+                logger.warning("Unhandled status %d", e.status)
+                return None
             if e.status >= 500:
                 logger.debug("%s retrying...", e.status)
                 # One second sleep time should be fine for now
                 await asyncio.sleep(1)
-                return await self.spotify_get_request(
-                    link, params, max_attempts - 1
-                )
             if e.status == 401:
                 logger.debug("Token reject during token requesting new token")
+                self.token = None
+                self.token_expiry = -1
                 await self.get_token()
-                return await self.spotify_get_request(
-                    link, params, max_attempts - 1
-                )
-            logger.error("%s: %s", e.status, e.message)
-            return None
+            if e.status == 429:
+                if e.headers and (delay := e.headers.get("Retry-After")):
+                    delay = float(delay) + random.randint(5, 10)
+                    logger.debug("Delay provided %.2f", delay)
+                else:
+                    logger.debug("No delay was provided")
+                    delay = 60
+                await asyncio.sleep(delay)
+            return await self.spotify_get_request(
+                link, params, max_attempts - 1
+            )
         except (aiohttp.ClientError, TimeoutError) as e:
             if max_attempts > 1:
                 logger.warning(

@@ -19,11 +19,6 @@
 - Suggested fix: Have stale-source recovery consume or collapse a pending modifier restart, or remove the queue-copy restart design.
 
 
-(Medium) [`src/hatsune_miku_bot/audio/audio_resolver.py:185`]
-
-- Description: Spotify treats 401 and 429 responses as terminal. A rejected token can remain cached until local expiry, while a rate-limited page aborts the complete album or playlist request.
-- Suggested fix: On 401, clear the token and refresh/retry once. On 429, honor `Retry-After` with bounded retries.
-
 (Medium) [`.github/workflows/deploy.yml:46`]
 
 - Description: `StrictHostKeyChecking=no` disables SSH server identity verification during deployment.

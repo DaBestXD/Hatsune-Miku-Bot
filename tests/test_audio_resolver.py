@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, override
 from unittest.mock import AsyncMock, MagicMock, Mock, call, patch
 
 import aiohttp
+from multidict import CIMultiDict
 from yt_dlp.utils import DownloadError
 
 import hatsune_miku_bot.audio.audio_resolver as resolver
@@ -46,6 +47,18 @@ def spotify_song() -> Song:
         "https://image.test/cover.jpg",
         "210",
         "0",
+    )
+
+
+def spotify_response_error(
+    status: int, headers: dict[str, str] | None = None
+) -> aiohttp.ClientResponseError:
+    return aiohttp.ClientResponseError(
+        as_any(SimpleNamespace(real_url="https://api.spotify.test")),
+        (),
+        status=status,
+        message="Spotify request failed",
+        headers=CIMultiDict(headers) if headers is not None else None,
     )
 
 
@@ -127,6 +140,116 @@ class SpotifyRequestTests(unittest.IsolatedAsyncioTestCase):
             params={"market": "US"},
         )
 
+    async def test_spotify_get_request_refreshes_token_after_401(self) -> None:
+        response = SimpleNamespace(
+            raise_for_status=Mock(),
+            json=AsyncMock(return_value={"name": "Miku"}),
+        )
+        token_response = SimpleNamespace(
+            raise_for_status=Mock(),
+            json=AsyncMock(
+                return_value={"access_token": "new-token", "expires_in": 3600}
+            ),
+        )
+        client = SimpleNamespace(
+            get=Mock(
+                side_effect=[
+                    AsyncResponseContext(error=spotify_response_error(401)),
+                    AsyncResponseContext(response),
+                ]
+            ),
+            post=Mock(return_value=AsyncResponseContext(token_response)),
+        )
+        audio_resolver = resolver.AudioInfoResolver(as_any(client))
+        audio_resolver.client_id = "client"
+        audio_resolver.client_secret = "secret"
+        audio_resolver.token = "rejected-token"
+        audio_resolver.token_expiry = float("inf")
+
+        with (
+            patch.object(resolver.time, "time", return_value=100),
+            patch.object(resolver.random, "randint", return_value=60),
+        ):
+            result = await audio_resolver.spotify_get_request(
+                "https://api.spotify.test/track/1", {"market": "US"}
+            )
+
+        self.assertEqual(result, {"name": "Miku"})
+        self.assertEqual(audio_resolver.token, "new-token")
+        client.post.assert_called_once()
+        self.assertEqual(
+            client.get.call_args_list,
+            [
+                call(
+                    "https://api.spotify.test/track/1",
+                    headers={"Authorization": "Bearer rejected-token"},
+                    params={"market": "US"},
+                ),
+                call(
+                    "https://api.spotify.test/track/1",
+                    headers={"Authorization": "Bearer new-token"},
+                    params={"market": "US"},
+                ),
+            ],
+        )
+
+    async def test_spotify_get_request_honors_retry_after_429(self) -> None:
+        response = SimpleNamespace(
+            raise_for_status=Mock(),
+            json=AsyncMock(return_value={"name": "Miku"}),
+        )
+        client = SimpleNamespace(
+            get=Mock(
+                side_effect=[
+                    AsyncResponseContext(
+                        error=spotify_response_error(429, {"Retry-After": "7"})
+                    ),
+                    AsyncResponseContext(response),
+                ]
+            )
+        )
+        audio_resolver = resolver.AudioInfoResolver(as_any(client))
+        audio_resolver.token = "token"
+        audio_resolver.token_expiry = float("inf")
+
+        with (
+            patch.object(resolver.asyncio, "sleep", new=AsyncMock()) as sleep,
+            patch.object(resolver.random, "randint", return_value=5),
+        ):
+            result = await audio_resolver.spotify_get_request(
+                "https://api.spotify.test/track/1", {"market": "US"}
+            )
+
+        self.assertEqual(result, {"name": "Miku"})
+        self.assertEqual(client.get.call_count, 2)
+        sleep.assert_awaited_once_with(12)
+
+    async def test_spotify_get_request_bounds_repeated_429_retries(
+        self,
+    ) -> None:
+        client = SimpleNamespace(
+            get=Mock(
+                return_value=AsyncResponseContext(
+                    error=spotify_response_error(429, {"Retry-After": "2"})
+                )
+            )
+        )
+        audio_resolver = resolver.AudioInfoResolver(as_any(client))
+        audio_resolver.token = "token"
+        audio_resolver.token_expiry = float("inf")
+
+        with (
+            patch.object(resolver.asyncio, "sleep", new=AsyncMock()) as sleep,
+            patch.object(resolver.random, "randint", return_value=5),
+        ):
+            result = await audio_resolver.spotify_get_request(
+                "https://api.spotify.test/track/1", {"market": "US"}
+            )
+
+        self.assertIsNone(result)
+        self.assertEqual(client.get.call_count, 3)
+        self.assertEqual(sleep.await_args_list, [call(7), call(7)])
+
     async def test_get_spotify_info_routes_track_album_and_playlist(
         self,
     ) -> None:
@@ -178,7 +301,9 @@ class SpotifyRequestTests(unittest.IsolatedAsyncioTestCase):
         audio_resolver = resolver.AudioInfoResolver(as_any(SimpleNamespace()))
         first_item = {"name": "First"}
         second_item = {"name": "Second"}
-        next_url = "https://api.spotify.test/tracks?offset=1"
+        third_item = {"name": "Third"}
+        second_page_url = "https://api.spotify.test/tracks?offset=1"
+        third_page_url = "https://api.spotify.test/tracks?offset=2"
         params = {"market": "US"}
 
         with patch.object(
@@ -186,8 +311,9 @@ class SpotifyRequestTests(unittest.IsolatedAsyncioTestCase):
             "spotify_get_request",
             new=AsyncMock(
                 side_effect=[
-                    {"items": [first_item], "next": next_url},
-                    {"items": [second_item], "next": None},
+                    {"items": [first_item], "next": second_page_url},
+                    {"items": [second_item], "next": third_page_url},
+                    {"items": [third_item], "next": None},
                 ]
             ),
         ) as get_request:
@@ -195,12 +321,86 @@ class SpotifyRequestTests(unittest.IsolatedAsyncioTestCase):
                 "https://api.spotify.test/tracks", params
             )
 
-        self.assertEqual(result, {"items": [first_item, second_item]})
+        self.assertEqual(
+            result, {"items": [first_item, second_item, third_item]}
+        )
         self.assertEqual(
             get_request.await_args_list,
             [
                 call("https://api.spotify.test/tracks", params),
-                call(next_url, {}),
+                call(second_page_url, {}),
+                call(third_page_url, {}),
+            ],
+        )
+
+    async def test_spotify_pagination_refreshes_expired_token_between_pages(
+        self,
+    ) -> None:
+        second_page_url = "https://api.spotify.test/tracks?offset=1"
+        first_item = {"name": "First"}
+        second_item = {"name": "Second"}
+        first_page = SimpleNamespace(
+            raise_for_status=Mock(),
+            json=AsyncMock(
+                return_value={
+                    "items": [first_item],
+                    "next": second_page_url,
+                }
+            ),
+        )
+        second_page = SimpleNamespace(
+            raise_for_status=Mock(),
+            json=AsyncMock(return_value={"items": [second_item], "next": None}),
+        )
+        token_response = SimpleNamespace(
+            raise_for_status=Mock(),
+            json=AsyncMock(
+                return_value={"access_token": "new-token", "expires_in": 3600}
+            ),
+        )
+        client = SimpleNamespace(
+            get=Mock(
+                side_effect=[
+                    AsyncResponseContext(first_page),
+                    AsyncResponseContext(second_page),
+                ]
+            ),
+            post=Mock(return_value=AsyncResponseContext(token_response)),
+        )
+        audio_resolver = resolver.AudioInfoResolver(as_any(client))
+        audio_resolver.client_id = "client"
+        audio_resolver.client_secret = "secret"
+        audio_resolver.token = "old-token"
+        audio_resolver.token_expiry = 200
+
+        with (
+            patch.object(
+                resolver.time,
+                "time",
+                side_effect=[100, 201, 201, 201],
+            ),
+            patch.object(resolver.random, "randint", return_value=60),
+        ):
+            result = await audio_resolver.spotify_get_paginated_request(
+                "https://api.spotify.test/tracks", {"market": "US"}
+            )
+
+        self.assertEqual(result, {"items": [first_item, second_item]})
+        self.assertEqual(audio_resolver.token, "new-token")
+        client.post.assert_called_once()
+        self.assertEqual(
+            client.get.call_args_list,
+            [
+                call(
+                    "https://api.spotify.test/tracks",
+                    headers={"Authorization": "Bearer old-token"},
+                    params={"market": "US"},
+                ),
+                call(
+                    second_page_url,
+                    headers={"Authorization": "Bearer new-token"},
+                    params={},
+                ),
             ],
         )
 
@@ -268,6 +468,7 @@ class ResolverRoutingTests(unittest.IsolatedAsyncioTestCase):
 
 
 class YtDlpResolverTests(unittest.TestCase):
+    @override
     def setUp(self) -> None:
         self.audio_resolver = resolver.AudioInfoResolver(
             as_any(SimpleNamespace())
