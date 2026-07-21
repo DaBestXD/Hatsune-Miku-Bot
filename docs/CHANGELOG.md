@@ -11,11 +11,14 @@ Dates are listed without release versions for now.
 
 - Coalesced rapid playback modifier changes into one restart so repeated effect commands no longer duplicate the active song or repeatedly count the same elapsed playback interval.
 - Preserved modifier restart state during stale-source recovery so a 403 after an effect change refreshes the audio source without repeating the song or losing its captured playback position.
+- Ignored bot voice-state updates that arrive after their guild controller has already been removed.
+- Ensured music cog unloading stops every guild controller and still closes its audio session when an individual controller fails to stop.
 
 ### Internal
 
 - Extracted per-guild audio source caching into a lock-protected cache component with expiration-aware cleanup and updated debugger cache reporting.
 - Added regressions for queued modifier changes, modifier restarts under both loop modes, and modifier restarts combined with 403 recovery.
+- Added coverage for empty Spotify and YouTube collections, stable SoundCloud URL recovery, guild lifecycle races and cleanup, SQLite playback rankings, `/speed` bounds, and `/song-tracker` responses.
 
 ## 2026-07-19
 

@@ -5,8 +5,9 @@ import io
 import unittest
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, call, patch
 
+import hatsune_miku_bot.audio.audio_resolver as resolver_module
 import hatsune_miku_bot.audio.guild_state_controller as controller_module
 import hatsune_miku_bot.audio.song_cache as song_cache_module
 from hatsune_miku_bot.audio.guild_state_controller import (
@@ -301,6 +302,91 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
             "https://audio.test/fresh",
         )
         self.assertEqual(controller.queue.qsize(), 0)
+
+    async def test_soundcloud_403_retry_resolves_stable_webpage_url(
+        self,
+    ) -> None:
+        webpage_url = "https://soundcloud.com/miku/track"
+        stale_media_url = "https://cf-media.sndcdn.test/stale"
+        fresh_media_url = "https://cf-media.sndcdn.test/fresh"
+        metadata_ydl = MagicMock()
+        metadata_ydl.__enter__.return_value = metadata_ydl
+        metadata_ydl.extract_info.return_value = {
+            "title": "SoundCloud Track",
+            "url": stale_media_url,
+            "webpage_url": webpage_url,
+            "duration": 90,
+            "view_count": 8,
+            "formats": [{"format_id": "http_mp3_128"}],
+        }
+        playback_ydl = MagicMock()
+        playback_ydl.__enter__.return_value = playback_ydl
+        playback_ydl.extract_info.return_value = {"url": fresh_media_url}
+        audio_resolver = resolver_module.AudioInfoResolver(as_any(object()))
+
+        with patch.object(
+            resolver_module,
+            "YoutubeDL",
+            side_effect=[metadata_ydl, playback_ydl],
+        ) as ydl_class:
+            song = audio_resolver.get_soundcloud_info(webpage_url)
+            self.assertIsInstance(song, Song)
+            assert song is not None
+
+            controller = make_controller()
+            built_source = SimpleNamespace(volume=1.0)
+            channel = FakeTextChannel()
+            vc = SimpleNamespace(
+                is_playing=Mock(return_value=False),
+                play=Mock(),
+            )
+            controller.state.songs = [song]
+            controller.state.text_channel = as_any(channel)
+            controller.state.vc = as_any(vc)
+            await controller.song_cache.add_key(
+                song.webpage_url,
+                CachedSong(stale_media_url),
+            )
+            self.assertEqual(
+                await controller.song_cache.get(webpage_url), stale_media_url
+            )
+
+            with patch.object(
+                controller_module,
+                "build_audio",
+                return_value=built_source,
+            ) as build_audio:
+                await controller.begin_playback()
+                await controller.finished_playback("HTTP error 403 Forbidden")
+
+                event = await controller.queue.get()
+                assert isinstance(event, Event)
+                await event.func_to_execute()
+                controller.queue.task_done()
+
+        self.assertEqual(song.webpage_url, webpage_url)
+        self.assertEqual(
+            ydl_class.call_args_list,
+            [
+                call(params=resolver_module.SOUNDCLOUD_INFO_PARAMS),
+                call(resolver_module.SOUNDCLOUD_AUDIO_PARAMS),
+            ],
+        )
+        metadata_ydl.extract_info.assert_called_once_with(
+            webpage_url, download=False
+        )
+        playback_ydl.extract_info.assert_called_once_with(
+            url=webpage_url, download=False
+        )
+        self.assertEqual(
+            [args.args[1] for args in build_audio.call_args_list],
+            [stale_media_url, fresh_media_url],
+        )
+        self.assertEqual(
+            await controller.song_cache.get(webpage_url), fresh_media_url
+        )
+        self.assertEqual(vc.play.call_count, 2)
+        channel.send.assert_awaited_once()
 
     async def test_begin_playback_skips_unresolvable_song(self) -> None:
         controller = make_controller()

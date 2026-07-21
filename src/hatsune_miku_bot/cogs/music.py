@@ -60,7 +60,17 @@ class MikuMusicCommands(commands.Cog):
 
     @override
     async def cog_unload(self) -> None:
-        # Blah blah doesn't stop all instances blah blah
+        controllers = tuple(self.guildstate_con_dict.values())
+        self.guildstate_con_dict.clear()
+        for controller in controllers:
+            try:
+                await controller.stop()
+            except Exception:
+                logger.exception(
+                    "Failed to stop guild controller %d during cog unload",
+                    controller.id,
+                )
+
         if self.audio_session and not self.audio_session.closed:
             logger.debug("Closing audio session")
             await self.audio_session.close()
@@ -113,7 +123,13 @@ class MikuMusicCommands(commands.Cog):
     ) -> None:
         if not self.bot.user or member.id != self.bot.user.id:
             return None
-        con = self.guildstate_con_dict[member.guild.id]
+        con = self.guildstate_con_dict.get(member.guild.id)
+        if not con:
+            logger.debug(
+                "Ignoring voice state update for guild %d without a controller",
+                member.guild.id,
+            )
+            return None
         if not before.channel and after.channel:
             logger.debug(
                 "Bot has joined the voice channel: %s at [%s]",

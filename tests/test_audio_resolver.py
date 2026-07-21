@@ -297,6 +297,63 @@ class SpotifyRequestTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsInstance(track, Song)
 
+    async def test_get_spotify_info_returns_none_for_unusable_collections(
+        self,
+    ) -> None:
+        audio_resolver = resolver.AudioInfoResolver(as_any(SimpleNamespace()))
+        metadata = {
+            "name": "Empty Collection",
+            "images": [{"url": "https://image.test/list.jpg"}],
+        }
+
+        for (
+            path_type,
+            metadata_url,
+            tracks_url,
+            metadata_params,
+            tracks_params,
+            unusable_item,
+        ) in (
+            (
+                "album/1",
+                resolver.SP_ALBUM_LINK + "1",
+                resolver.SP_ALBUM_LINK + "1/tracks",
+                resolver.SP_ALBUM_METADATA,
+                resolver.SP_ALBUM_SONG_METADATA,
+                None,
+            ),
+            (
+                "playlist/1",
+                resolver.SP_PLAYLIST_LINK + "1",
+                resolver.SP_PLAYLIST_LINK + "1/tracks",
+                resolver.SP_PLAYLIST_METADATA,
+                resolver.SP_PLAYLIST_SONG_METADATA,
+                {"track": None},
+            ),
+        ):
+            with (
+                self.subTest(path_type=path_type),
+                patch.object(
+                    audio_resolver,
+                    "spotify_get_request",
+                    new=AsyncMock(return_value=metadata),
+                ) as get_request,
+                patch.object(
+                    audio_resolver,
+                    "spotify_get_paginated_request",
+                    new=AsyncMock(return_value={"items": [unusable_item]}),
+                ) as get_paginated_request,
+            ):
+                result = await audio_resolver.get_spotify_info(path_type, "1")
+
+            self.assertIsNone(result)
+            get_request.assert_awaited_once_with(
+                metadata_url, params=metadata_params
+            )
+            get_paginated_request.assert_awaited_once_with(
+                tracks_url, params=tracks_params
+            )
+
     async def test_spotify_paginated_request_combines_all_pages(self) -> None:
         audio_resolver = resolver.AudioInfoResolver(as_any(SimpleNamespace()))
         first_item = {"name": "First"}
@@ -600,6 +657,26 @@ class YtDlpResolverTests(unittest.TestCase):
                 call(params=resolver.YOUTUBE_INFO_PARAMS),
                 call(params=resolver.YOUTUBE_INFO_PARAMS),
             ],
+        )
+
+    def test_get_youtube_info_returns_none_for_empty_playlist(self) -> None:
+        url = "https://youtube.test/playlist?list=empty"
+        ydl = MagicMock()
+        ydl.extract_info.return_value = {
+            "title": "Empty Playlist",
+            "original_url": url,
+            "entries": [],
+        }
+
+        with patch.object(
+            resolver, "YoutubeDL", return_value=ydl_context(ydl)
+        ) as ydl_class:
+            result = self.audio_resolver.get_youtube_info(url)
+
+        self.assertIsNone(result)
+        ydl_class.assert_called_once_with(params=resolver.YOUTUBE_INFO_PARAMS)
+        ydl.extract_info.assert_called_once_with(
+            url, download=False, process=False
         )
 
     def test_get_soundcloud_info_accepts_http_mp3_track(self) -> None:

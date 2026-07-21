@@ -24,6 +24,14 @@ class FakeSession:
 
 
 class MusicCogTests(unittest.IsolatedAsyncioTestCase):
+    def test_speed_command_declares_supported_range(self) -> None:
+        parameters = music_module.MikuMusicCommands.speed.parameters
+
+        self.assertEqual(len(parameters), 1)
+        self.assertEqual(parameters[0].name, "effect_strength")
+        self.assertEqual(parameters[0].min_value, 0.5)
+        self.assertEqual(parameters[0].max_value, 2.0)
+
     async def test_cog_load_and_unload_manage_audio_session(self) -> None:
         cog = music_module.MikuMusicCommands(
             as_any(SimpleNamespace()), as_any(AsyncMock())
@@ -44,6 +52,33 @@ class MusicCogTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(cog.audio_info_resolver)
         assert isinstance(session, FakeSession)
         session.close.assert_awaited_once_with()
+
+    async def test_cog_unload_completes_cleanup_after_controller_failure(
+        self,
+    ) -> None:
+        cog = music_module.MikuMusicCommands(
+            as_any(SimpleNamespace()), as_any(AsyncMock())
+        )
+        session = FakeSession()
+        cog.audio_session = as_any(session)
+        cog.audio_info_resolver = as_any(object())
+        controllers = [
+            SimpleNamespace(id=guild_id, stop=AsyncMock())
+            for guild_id in (1, 2)
+        ]
+        controllers[0].stop.side_effect = RuntimeError("stop failed")
+        cog.guildstate_con_dict = {
+            controller.id: as_any(controller) for controller in controllers
+        }
+
+        with self.assertLogs(music_module.logger, level="ERROR"):
+            await cog.cog_unload()
+
+        self.assertEqual(cog.guildstate_con_dict, {})
+        for controller in controllers:
+            controller.stop.assert_awaited_once_with()
+        session.close.assert_awaited_once_with()
+        self.assertIsNone(cog.audio_info_resolver)
 
     async def test_guild_join_and_remove_manage_controller(self) -> None:
         bot = as_any(SimpleNamespace())
@@ -96,6 +131,83 @@ class MusicCogTests(unittest.IsolatedAsyncioTestCase):
         for controller in controllers:
             controller.run.assert_awaited_once_with()
 
+    async def test_voice_state_update_ignores_other_members(self) -> None:
+        bot = SimpleNamespace(user=SimpleNamespace(id=10))
+        cog = music_module.MikuMusicCommands(as_any(bot), as_any(AsyncMock()))
+        original_vc = object()
+        controller = SimpleNamespace(state=SimpleNamespace(vc=original_vc))
+        cog.guildstate_con_dict[42] = as_any(controller)
+        member = SimpleNamespace(
+            id=11,
+            guild=SimpleNamespace(id=42, name="Test Guild", voice_client=None),
+        )
+
+        await cog.on_voice_state_update(
+            as_any(member),
+            as_any(SimpleNamespace(channel=None)),
+            as_any(SimpleNamespace(channel=object())),
+        )
+
+        self.assertIs(controller.state.vc, original_vc)
+
+    async def test_voice_state_update_ignores_missing_controller(self) -> None:
+        bot = SimpleNamespace(user=SimpleNamespace(id=10))
+        cog = music_module.MikuMusicCommands(as_any(bot), as_any(AsyncMock()))
+        member = SimpleNamespace(
+            id=10,
+            guild=SimpleNamespace(id=42, name="Test Guild", voice_client=None),
+        )
+
+        with self.assertLogs(music_module.logger, level="DEBUG"):
+            await cog.on_voice_state_update(
+                as_any(member),
+                as_any(SimpleNamespace(channel=None)),
+                as_any(SimpleNamespace(channel=object())),
+            )
+
+        self.assertEqual(cog.guildstate_con_dict, {})
+
+    async def test_voice_state_update_tracks_bot_join_leave_and_move(
+        self,
+    ) -> None:
+        class FakeVoiceClient:
+            pass
+
+        bot = SimpleNamespace(user=SimpleNamespace(id=10))
+        cog = music_module.MikuMusicCommands(as_any(bot), as_any(AsyncMock()))
+        voice_client = FakeVoiceClient()
+        guild = SimpleNamespace(
+            id=42, name="Test Guild", voice_client=voice_client
+        )
+        member = SimpleNamespace(id=10, guild=guild)
+        controller = SimpleNamespace(state=SimpleNamespace(vc=None))
+        cog.guildstate_con_dict[42] = as_any(controller)
+        first_channel = object()
+        second_channel = object()
+
+        with patch.object(music_module, "VoiceClient", FakeVoiceClient):
+            await cog.on_voice_state_update(
+                as_any(member),
+                as_any(SimpleNamespace(channel=None)),
+                as_any(SimpleNamespace(channel=first_channel)),
+            )
+            self.assertIs(controller.state.vc, voice_client)
+
+            controller.state.vc = None
+            await cog.on_voice_state_update(
+                as_any(member),
+                as_any(SimpleNamespace(channel=first_channel)),
+                as_any(SimpleNamespace(channel=second_channel)),
+            )
+            self.assertIs(controller.state.vc, voice_client)
+
+            await cog.on_voice_state_update(
+                as_any(member),
+                as_any(SimpleNamespace(channel=second_channel)),
+                as_any(SimpleNamespace(channel=None)),
+            )
+            self.assertIsNone(controller.state.vc)
+
     async def test_play_delegates_resolved_song_to_guild_controller(
         self,
     ) -> None:
@@ -142,6 +254,69 @@ class MusicCogTests(unittest.IsolatedAsyncioTestCase):
             controller.queue_songs, interaction, song, vc
         )
         controller.add_event.assert_any_await(controller.begin_playback)
+
+    async def test_song_tracker_replies_when_no_songs_have_played(
+        self,
+    ) -> None:
+        db_logic = SimpleNamespace(
+            rank_song_per_guild=AsyncMock(return_value=[])
+        )
+        interaction = SimpleNamespace(
+            guild_id=42,
+            response=SimpleNamespace(defer=AsyncMock()),
+        )
+        cog = music_module.MikuMusicCommands(
+            as_any(SimpleNamespace()), as_any(db_logic)
+        )
+        cog.guildstate_con_dict[42] = as_any(SimpleNamespace(db_logic=db_logic))
+
+        with patch.object(music_module, "reply", new=AsyncMock()) as reply_mock:
+            await as_any(music_module.MikuMusicCommands.song_tracker.callback)(
+                cog, interaction
+            )
+
+        interaction.response.defer.assert_awaited_once_with()
+        db_logic.rank_song_per_guild.assert_awaited_once_with(42)
+        reply_mock.assert_awaited_once()
+        self.assertIsNotNone(reply_mock.await_args)
+        assert reply_mock.await_args is not None
+        embed = reply_mock.await_args.kwargs["embed"]
+        self.assertEqual(
+            embed.author.name,
+            "No songs played yet, go play some songs first!",
+        )
+
+    async def test_song_tracker_replies_with_ranked_songs(self) -> None:
+        db_logic = SimpleNamespace(
+            rank_song_per_guild=AsyncMock(
+                return_value=[("World is Mine", 5), ("Melt", 3)]
+            )
+        )
+        interaction = SimpleNamespace(
+            guild_id=42,
+            response=SimpleNamespace(defer=AsyncMock()),
+        )
+        cog = music_module.MikuMusicCommands(
+            as_any(SimpleNamespace()), as_any(db_logic)
+        )
+        cog.guildstate_con_dict[42] = as_any(SimpleNamespace(db_logic=db_logic))
+
+        with patch.object(music_module, "reply", new=AsyncMock()) as reply_mock:
+            await as_any(music_module.MikuMusicCommands.song_tracker.callback)(
+                cog, interaction
+            )
+
+        interaction.response.defer.assert_awaited_once_with()
+        db_logic.rank_song_per_guild.assert_awaited_once_with(42)
+        reply_mock.assert_awaited_once()
+        self.assertIsNotNone(reply_mock.await_args)
+        assert reply_mock.await_args is not None
+        embed = reply_mock.await_args.kwargs["embed"]
+        self.assertEqual(embed.fields[0].name, "Most songs played")
+        self.assertEqual(
+            embed.fields[0].value,
+            "```\n1. World is Mine: 5 plays\n2. Melt: 3 plays\n```",
+        )
 
 
 class UtilityCogTests(unittest.IsolatedAsyncioTestCase):
