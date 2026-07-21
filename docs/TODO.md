@@ -46,11 +46,6 @@
 
 ### Test coverage gaps
 
-(Medium) [`tests/test_audio_resolver.py:52`]
-
-- Description: Spotify coverage does not exercise three or more pagination pages, token expiry between pages, a server-side 401, or a 429 response with `Retry-After`.
-- Suggested fix: Add three-plus-page pagination tests, an explicit expired-token refresh test, a 401 refresh/retry test, and bounded 429 backoff coverage.
-
 (Medium) [`tests/test_guild_state_controller.py:432`]
 
 - Description: Modifier tests do not process multiple queued modifier events before `after_callback`, a modifier followed by 403 recovery, or a modifier while `song_loop_all` is active.
