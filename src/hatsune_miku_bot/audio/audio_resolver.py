@@ -499,5 +499,5 @@ def _get_audio_source_impl(query: Song) -> str | None:
         return None
 
 
-async def get_audio_source(query: Song):
+async def get_audio_source(query: Song) -> str | None:
     return await asyncio.to_thread(_get_audio_source_impl, query)

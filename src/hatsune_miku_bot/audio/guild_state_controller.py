@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from typing import Any, Literal
+from urllib.parse import parse_qs, urlsplit
 
 from discord import (
     FFmpegPCMAudio,
@@ -23,6 +24,9 @@ from hatsune_miku_bot.db_logging.db_main import DBLogic
 from hatsune_miku_bot.utils.discord_helpers import reply, text_only_embed
 
 logger = logging.getLogger(__name__)
+
+CACHE_EXPIRY_MARGIN_SECONDS = 300
+DEFAULT_CACHE_LIFETIME_SECONDS = 1800
 
 
 class GuildStateController:
@@ -79,7 +83,32 @@ class GuildStateController:
             finally:
                 self.queue.task_done()
 
-    async def remove_song_from_cache(self, song_url: str) -> None:
+    def get_expiry_from_source(self, source: str) -> float:
+        query = parse_qs(urlsplit(source).query)
+        expiry_values = query.get("expire") or query.get("expires")
+        if not expiry_values:
+            return DEFAULT_CACHE_LIFETIME_SECONDS
+        try:
+            expiry = int(expiry_values[0])
+        except ValueError:
+            return DEFAULT_CACHE_LIFETIME_SECONDS
+        return max(
+            0,
+            expiry - time.time() - CACHE_EXPIRY_MARGIN_SECONDS,
+        )
+
+    # TODO: TERRIBLE CHANGE LATER
+    async def remove_song_from_cache(
+        self,
+        song_url: str,
+        expected_source: str | None = None,
+    ) -> None:
+        if (
+            expected_source is not None
+            and self.state.song_cache.get(song_url) != expected_source
+        ):
+            logger.debug("Cache source for %s has been refreshed", song_url)
+            return None
         try:
             logger.debug("Removed %s from song cache", song_url)
             self.state.song_cache.pop(song_url)
@@ -88,11 +117,18 @@ class GuildStateController:
         return None
 
     async def schedule_removal_from_cache(
-        self, song_url: str, time_until_removal: float = 1800
+        self,
+        song_url: str,
+        expected_source: str,
+        time_until_removal: float,
     ) -> None:
         logger.debug("Removing %s in %d seconds", song_url, time_until_removal)
         await asyncio.sleep(time_until_removal)
-        await self.add_event(self.remove_song_from_cache, song_url)
+        await self.add_event(
+            self.remove_song_from_cache,
+            song_url,
+            expected_source,
+        )
 
     async def cache_song(self, song: Song) -> None:
         source = await get_audio_source(song)
@@ -101,8 +137,12 @@ class GuildStateController:
                 "Failed to cache audio for %s[%s]", song.title, song.webpage_url
             )
             return None
+        expiry = self.get_expiry_from_source(source)
         logger.debug("Caching %s[%s]", song.title, song.webpage_url)
         self.state.song_cache[song.webpage_url] = source
+        asyncio.create_task(  # noqa: RUF006
+            self.schedule_removal_from_cache(song.webpage_url, source, expiry)
+        )
 
     async def begin_song_cache(self) -> None:
         """
@@ -113,7 +153,6 @@ class GuildStateController:
             if song:
                 continue
             await self.add_event(self.cache_song, s)
-            asyncio.create_task(self.schedule_removal_from_cache(s.webpage_url))  # noqa: RUF006
 
     # TODO: DOCSTRING
     async def queue_songs(
@@ -165,6 +204,14 @@ class GuildStateController:
                 logger.debug("Caching %s[%s]", song.title, song.webpage_url)
                 self.state.song_cache[self.state.active_song.webpage_url] = (
                     source
+                )
+                time_until_removal = self.get_expiry_from_source(source)
+                asyncio.create_task(  # noqa: RUF006
+                    self.schedule_removal_from_cache(
+                        song.webpage_url,
+                        source,
+                        time_until_removal,
+                    )
                 )
         if not source:
             # Error branch if source cannot be found

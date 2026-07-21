@@ -87,6 +87,41 @@ class EventLoopTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CacheAndQueueTests(unittest.IsolatedAsyncioTestCase):
+    async def test_get_expiry_from_source_returns_removal_delay(
+        self,
+    ) -> None:
+        controller = make_controller()
+
+        with patch.object(controller_module.time, "time", return_value=1000):
+            self.assertEqual(
+                controller.get_expiry_from_source(
+                    "https://googlevideo.test/audio?expire=4600"
+                ),
+                3300,
+            )
+            self.assertEqual(
+                controller.get_expiry_from_source(
+                    "https://soundcloud.cloud/audio?expires=2800"
+                ),
+                1500,
+            )
+            self.assertEqual(
+                controller.get_expiry_from_source(
+                    "https://googlevideo.test/audio?expire=900"
+                ),
+                0,
+            )
+            self.assertEqual(
+                controller.get_expiry_from_source("https://audio.test/source"),
+                1800,
+            )
+            self.assertEqual(
+                controller.get_expiry_from_source(
+                    "https://audio.test/source?expire=invalid"
+                ),
+                1800,
+            )
+
     async def test_cache_song_records_only_resolved_sources(self) -> None:
         controller = make_controller()
         good = make_song("Good", "https://song.test/good")
@@ -115,6 +150,21 @@ class CacheAndQueueTests(unittest.IsolatedAsyncioTestCase):
         await controller.remove_song_from_cache("song")
 
         self.assertEqual(controller.state.song_cache, {})
+
+    async def test_old_removal_timer_preserves_refreshed_source(self) -> None:
+        controller = make_controller()
+        song_url = "https://song.test/refreshed"
+        controller.state.song_cache[song_url] = "https://audio.test/new"
+
+        await controller.remove_song_from_cache(
+            song_url,
+            "https://audio.test/old",
+        )
+
+        self.assertEqual(
+            controller.state.song_cache,
+            {song_url: "https://audio.test/new"},
+        )
 
     async def test_queue_songs_adds_song_and_playlist_and_schedules_cache(
         self,
@@ -193,25 +243,42 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
         vc = SimpleNamespace(is_playing=Mock(return_value=False), play=Mock())
         controller.state.songs = [song]
         controller.state.vc = as_any(vc)
+        source = "https://googlevideo.test/fresh?expire=4600"
+        scheduled_removal = Mock(return_value=object())
 
         with (
             patch.object(
                 controller_module,
                 "get_audio_source",
-                new=AsyncMock(return_value="https://audio.test/fresh"),
+                new=AsyncMock(return_value=source),
             ),
             patch.object(
                 controller_module.asyncio,
                 "to_thread",
                 new=AsyncMock(return_value=SimpleNamespace(volume=1.0)),
             ),
+            patch.object(controller_module.time, "time", return_value=1000),
+            patch.object(
+                controller,
+                "schedule_removal_from_cache",
+                new=scheduled_removal,
+            ),
+            patch.object(
+                controller_module.asyncio, "create_task"
+            ) as create_task,
         ):
             await controller.begin_playback()
 
         self.assertEqual(
             controller.state.song_cache[song.webpage_url],
-            "https://audio.test/fresh",
+            source,
         )
+        scheduled_removal.assert_called_once_with(
+            song.webpage_url,
+            source,
+            3300,
+        )
+        create_task.assert_called_once_with(scheduled_removal.return_value)
         vc.play.assert_called_once()
 
     async def test_stale_cache_retry_does_not_announce_or_count_twice(
