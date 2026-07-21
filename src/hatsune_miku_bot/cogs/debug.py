@@ -54,7 +54,7 @@ class BotDebugger(commands.Cog):
             title=cog.__class__.__name__,
         )
 
-    def return_guild_state_embed(
+    async def return_guild_state_embed(
         self, gp_con: GuildStateController, guild_name: str
     ) -> discord.Embed:
         embed = discord.Embed(
@@ -79,7 +79,7 @@ class BotDebugger(commands.Cog):
             name="State",
             value=(
                 f"Queued songs: `{len(gp_con.state.songs)}`\n"
-                f"Cached sources: `{len(gp_con.state.song_cache)}`\n"
+                f"Cached sources: `{await gp_con.song_cache.get_size()}`\n"
                 f"Seek time: `{gp_con.state.song_mods.position_offset_s}`\n"
                 f"Start time: `{gp_con.state.song_mods.start_timestamp}`\n"
                 f"Voice connected: `{gp_con.state.vc is not None}`"
@@ -140,7 +140,7 @@ class BotDebugger(commands.Cog):
                 else str(guild_id)
             )
             list_embeds.append(
-                self.return_guild_state_embed(gp_con, guild_name)
+                await self.return_guild_state_embed(gp_con, guild_name)
             )
         for e in list_embeds:
             await reply(interaction, embed=e)

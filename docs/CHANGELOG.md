@@ -5,6 +5,18 @@
 User-facing changes and developer-facing internal changes are tracked together.
 Dates are listed without release versions for now.
 
+## 2026-07-21
+
+### Fixed
+
+- Coalesced rapid playback modifier changes into one restart so repeated effect commands no longer duplicate the active song or repeatedly count the same elapsed playback interval.
+- Preserved modifier restart state during stale-source recovery so a 403 after an effect change refreshes the audio source without repeating the song or losing its captured playback position.
+
+### Internal
+
+- Extracted per-guild audio source caching into a lock-protected cache component with expiration-aware cleanup and updated debugger cache reporting.
+- Added regressions for queued modifier changes, modifier restarts under both loop modes, and modifier restarts combined with 403 recovery.
+
 ## 2026-07-19
 
 ### Changed

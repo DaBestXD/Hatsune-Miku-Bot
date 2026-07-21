@@ -5,8 +5,8 @@ import random
 import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Literal
-from urllib.parse import parse_qs, urlsplit
 
 from discord import (
     FFmpegPCMAudio,
@@ -19,14 +19,18 @@ from discord.ext import commands
 
 from hatsune_miku_bot.audio.audio_resolver import get_audio_source
 from hatsune_miku_bot.audio.playback_helpers import build_audio
+from hatsune_miku_bot.audio.song_cache import CachedSong, SongCache
 from hatsune_miku_bot.audio.song_playlist_classes import Playlist, Song
 from hatsune_miku_bot.db_logging.db_main import DBLogic
 from hatsune_miku_bot.utils.discord_helpers import reply, text_only_embed
 
 logger = logging.getLogger(__name__)
 
-CACHE_EXPIRY_MARGIN_SECONDS = 300
-DEFAULT_CACHE_LIFETIME_SECONDS = 1800
+
+class _PlaybackType(Enum):
+    MODIFIED_RESTART = 0
+    STALE_RESTART = 1
+    NEW_SONG = 2
 
 
 class GuildStateController:
@@ -35,6 +39,7 @@ class GuildStateController:
         self.bot = bot
         self.queue: asyncio.Queue[Event | StopEvent] = asyncio.Queue()
         self.state = GuildPlaybackState()
+        self.song_cache = SongCache()
         self.task: asyncio.Task[None] | None = None
         self.db_logic = db_logic
 
@@ -74,61 +79,15 @@ class GuildStateController:
                     logger.debug("Stop event recieved, breaking loop")
                     break
                 await event.func_to_execute()
-            except Exception:
+            except Exception as e:
                 logger.exception(
-                    "Failed handling %s for guild %s",
+                    "Failed handling %s for guild %s, %s",
                     type(event).__name__,
                     self.id,
+                    e,
                 )
             finally:
                 self.queue.task_done()
-
-    def get_expiry_from_source(self, source: str) -> float:
-        query = parse_qs(urlsplit(source).query)
-        expiry_values = query.get("expire") or query.get("expires")
-        if not expiry_values:
-            return DEFAULT_CACHE_LIFETIME_SECONDS
-        try:
-            expiry = int(expiry_values[0])
-        except ValueError:
-            return DEFAULT_CACHE_LIFETIME_SECONDS
-        return max(
-            0,
-            expiry - time.time() - CACHE_EXPIRY_MARGIN_SECONDS,
-        )
-
-    # TODO: TERRIBLE CHANGE LATER
-    async def remove_song_from_cache(
-        self,
-        song_url: str,
-        expected_source: str | None = None,
-    ) -> None:
-        if (
-            expected_source is not None
-            and self.state.song_cache.get(song_url) != expected_source
-        ):
-            logger.debug("Cache source for %s has been refreshed", song_url)
-            return None
-        try:
-            logger.debug("Removed %s from song cache", song_url)
-            self.state.song_cache.pop(song_url)
-        except KeyError:
-            logger.warning("%s was missing from cache already", song_url)
-        return None
-
-    async def schedule_removal_from_cache(
-        self,
-        song_url: str,
-        expected_source: str,
-        time_until_removal: float,
-    ) -> None:
-        logger.debug("Removing %s in %d seconds", song_url, time_until_removal)
-        await asyncio.sleep(time_until_removal)
-        await self.add_event(
-            self.remove_song_from_cache,
-            song_url,
-            expected_source,
-        )
 
     async def cache_song(self, song: Song) -> None:
         source = await get_audio_source(song)
@@ -137,19 +96,15 @@ class GuildStateController:
                 "Failed to cache audio for %s[%s]", song.title, song.webpage_url
             )
             return None
-        expiry = self.get_expiry_from_source(source)
         logger.debug("Caching %s[%s]", song.title, song.webpage_url)
-        self.state.song_cache[song.webpage_url] = source
-        asyncio.create_task(  # noqa: RUF006
-            self.schedule_removal_from_cache(song.webpage_url, source, expiry)
-        )
+        await self.song_cache.add_key(song.webpage_url, CachedSong(source))
 
     async def begin_song_cache(self) -> None:
         """
         Cache the first 3 songs in the queue
         """
         for s in self.state.songs[:3]:
-            song = self.state.song_cache.get(s.webpage_url)
+            song = await self.song_cache.get(s.webpage_url)
             if song:
                 continue
             await self.add_event(self.cache_song, s)
@@ -180,8 +135,38 @@ class GuildStateController:
             )
         await self.add_event(self.begin_song_cache)
 
+    async def _missing_source_helper(self) -> None:
+        if not self.state.active_song:
+            logger.warning("No source found while active song was none")
+        else:
+            logger.warning(
+                "No source found for %s", self.state.active_song.title
+            )
+        if self.state.text_channel:
+            await self.state.text_channel.send(
+                embed=self.state.songs[0].return_err_embed()
+            )
+        self.state.songs.pop(0)
+        self.state.active_song = (
+            self.state.songs[0] if self.state.songs else None
+        )
+        if self.state.active_song:
+            await self.add_event(self.begin_playback)
+        elif self.state.text_channel:
+            await self.state.text_channel.send(
+                embed=text_only_embed("Queue empty🐱")
+            )
+        else:
+            logger.debug(
+                "No text channel was set for erorr branch in %s",
+                self.begin_playback.__name__,
+            )
+        return None
+
     # TODO: DOCSTRING
-    async def begin_playback(self, cache_expired_restart: bool = False) -> None:
+    async def begin_playback(
+        self, playback_type: _PlaybackType = _PlaybackType.NEW_SONG
+    ) -> None:
         if not self.state.vc:
             logger.warning("Attempted to play song while not in vc")
             return None
@@ -194,49 +179,18 @@ class GuildStateController:
         if self.state.vc.is_playing():
             # Debug message here too noisy, will fire on skip/queue events, etc.
             return None
-        source = self.state.song_cache.get(self.state.active_song.webpage_url)
+        await self.song_cache.clear_expired_songs()
+        source = await self.song_cache.get(self.state.active_song.webpage_url)
         if not source:
-            if not cache_expired_restart:
-                logger.debug("Cache miss, fetching source using ydl")
+            # Cache check branch
+            logger.debug("Cache miss, fetching source using ydl")
             source = await get_audio_source(self.state.active_song)
             if source:
-                song = self.state.active_song
-                logger.debug("Caching %s[%s]", song.title, song.webpage_url)
-                self.state.song_cache[self.state.active_song.webpage_url] = (
-                    source
-                )
-                time_until_removal = self.get_expiry_from_source(source)
-                asyncio.create_task(  # noqa: RUF006
-                    self.schedule_removal_from_cache(
-                        song.webpage_url,
-                        source,
-                        time_until_removal,
-                    )
+                await self.song_cache.add_key(
+                    self.state.active_song.webpage_url, CachedSong(source)
                 )
         if not source:
-            # Error branch if source cannot be found
-            logger.warning(
-                "No source found for %s", self.state.active_song.title
-            )
-            if self.state.text_channel:
-                await self.state.text_channel.send(
-                    embed=self.state.songs[0].return_err_embed()
-                )
-            self.state.songs.pop(0)
-            self.state.active_song = (
-                self.state.songs[0] if self.state.songs else None
-            )
-            if self.state.active_song:
-                await self.add_event(self.begin_playback)
-            elif self.state.text_channel:
-                await self.state.text_channel.send(
-                    embed=text_only_embed("Queue empty🐱")
-                )
-            else:
-                logger.debug(
-                    "No text channel was set for erorr branch in %s",
-                    self.begin_playback.__name__,
-                )
+            await self._missing_source_helper()
             return None
         stderr_buff = io.BytesIO()
         built_source = await asyncio.to_thread(
@@ -251,12 +205,14 @@ class GuildStateController:
         self.state.song_mods.start_timestamp = time.monotonic()
         self.state.vc.play(
             built_source,
-            after=lambda error: self.after_callback(error, stderr_buff),
+            after=lambda error: self.after_callback(
+                error, stderr_buff, playback_type
+            ),
         )
-        if self.state.song_mods.is_song_modified:
-            self.state.song_mods.is_song_modified = False
+        if playback_type is _PlaybackType.MODIFIED_RESTART:
+            self.state.song_mods.modifier_restart_pending = False
             return None
-        if not cache_expired_restart:
+        if playback_type is _PlaybackType.NEW_SONG:
             await self.db_logic.insert_song_playback(
                 self.state.active_song, self.id
             )
@@ -272,33 +228,45 @@ class GuildStateController:
                     "No text channel was set for %s",
                     self.begin_playback.__name__,
                 )
-        else:
+        if playback_type is _PlaybackType.STALE_RESTART:
             logger.debug("Recovered from stale cache hit")
 
     def after_callback(
-        self, error: Exception | None, stderr_buff: io.BytesIO
+        self,
+        error: Exception | None,
+        stderr_buff: io.BytesIO,
+        playback_type: _PlaybackType,
     ) -> None:
         if error:
             logger.error("%s", error)
         ffmpeg_error = stderr_buff.getvalue().decode("utf-8", errors="ignore")
         asyncio.run_coroutine_threadsafe(
-            self.add_event(self.finished_playback, ffmpeg_error), self.bot.loop
+            self.add_event(self.finished_playback, ffmpeg_error, playback_type),
+            self.bot.loop,
         )
         return None
 
-    async def finished_playback(self, ffmpeg_error: str) -> None:
+    async def finished_playback(
+        self,
+        ffmpeg_error: str,
+        playback_type: _PlaybackType = _PlaybackType.NEW_SONG,
+    ) -> None:
         if ffmpeg_error:
             logger.debug("%s", ffmpeg_error)
         if "403 Forbidden" in ffmpeg_error:
-            await self.recover_stale_audio_source()
+            await self.recover_stale_audio_source(playback_type)
             return None
-        if not self.state.song_mods.is_song_modified:
-            self.state.song_mods.start_timestamp = None
-            self.state.song_mods.position_offset_s = 0
+        if self.state.song_mods.modifier_restart_pending:
+            await self.add_event(
+                self.begin_playback,
+                playback_type=_PlaybackType.MODIFIED_RESTART,
+            )
+            return None
+        self.state.song_mods.start_timestamp = None
+        self.state.song_mods.position_offset_s = 0
         if self.state.song_mods.song_loop_all:
             if self.state.active_song:
-                if not self.state.song_mods.is_song_modified:
-                    self.state.songs.append(self.state.active_song)
+                self.state.songs.append(self.state.active_song)
                 self.state.songs.pop(0)
             else:
                 logger.warning("Doing song loop all no active song was found")
@@ -322,18 +290,30 @@ class GuildStateController:
             await self.add_event(self.begin_playback)
             return None
 
-    async def recover_stale_audio_source(self) -> None:
+    async def recover_stale_audio_source(
+        self, failed_playback_type: _PlaybackType
+    ) -> None:
         active_song = self.state.active_song
         if not active_song:
             logger.warning("403 error while no active song set")
             return None
-        self.state.song_cache.pop(active_song.webpage_url, None)
-        self.state.song_mods.start_timestamp = None
-        self.state.song_mods.position_offset_s = 0
+        preserve_modifier_position = (
+            failed_playback_type is _PlaybackType.MODIFIED_RESTART
+            or self.state.song_mods.modifier_restart_pending
+        )
+        await self.song_cache.delete_key(active_song.webpage_url)
+        if not preserve_modifier_position:
+            self.state.song_mods.start_timestamp = None
+            self.state.song_mods.position_offset_s = 0
         if not self.state.songs or self.state.songs[0] is not active_song:
             self.state.songs.insert(0, active_song)
         self.state.active_song = active_song
-        await self.add_event(self.begin_playback, cache_expired_restart=True)
+        playback_type = (
+            _PlaybackType.MODIFIED_RESTART
+            if preserve_modifier_position
+            else _PlaybackType.STALE_RESTART
+        )
+        await self.add_event(self.begin_playback, playback_type=playback_type)
         return None
 
     async def skip(self, interaction: Interaction) -> None:
@@ -344,6 +324,7 @@ class GuildStateController:
                 embed=self.state.active_song.return_skip_embed(next_song),
             )
         self.state.song_mods.song_loop = False
+        self.state.song_mods.modifier_restart_pending = False
         if self.state.vc:
             self.state.vc.stop()
         else:
@@ -430,20 +411,24 @@ class GuildStateController:
     async def _modify_song_playback(
         self, interaction: Interaction, embed_text: str
     ) -> None:
-        self.state.song_mods.is_song_modified = True
-        if self.state.vc and self.state.active_song:
-            # Steps to modify song insert copy of song into queue
-            if not self.state.song_mods.song_loop:
-                self.state.songs.insert(1, self.state.active_song)
-            self.state.vc.stop()
-        else:
-            logger.warning("Attempted to modify song without an active song")
         await reply(interaction, embed=text_only_embed(embed_text))
 
-    async def nightcore(self, interaction: Interaction) -> None:
+    def _request_modifier_restart(self) -> None:
+        if self.state.song_mods.modifier_restart_pending:
+            return None
+        if not self.state.vc or not self.state.active_song:
+            logger.warning("Attempted to modify song without an active song")
+            return None
         self.state.song_mods.position_offset_s = (
             self.state.song_mods.interrupt_time()
         )
+        self.state.song_mods.start_timestamp = None
+        self.state.song_mods.modifier_restart_pending = True
+        self.state.vc.stop()
+        return None
+
+    async def nightcore(self, interaction: Interaction) -> None:
+        self._request_modifier_restart()
         if self.state.song_mods.is_nightcore():
             self.state.song_mods.song_pitch = None
             text = "Nightcore off!😿"
@@ -456,9 +441,7 @@ class GuildStateController:
     async def set_bass(
         self, interaction: Interaction, effect_strength: float
     ) -> None:
-        self.state.song_mods.position_offset_s = (
-            self.state.song_mods.interrupt_time()
-        )
+        self._request_modifier_restart()
         self.state.song_mods.song_bass = effect_strength
         await self._modify_song_playback(
             interaction, f"Bass set to {effect_strength}"
@@ -468,9 +451,7 @@ class GuildStateController:
     async def set_speed(
         self, interaction: Interaction, effect_strength: float
     ) -> None:
-        self.state.song_mods.position_offset_s = (
-            self.state.song_mods.interrupt_time()
-        )
+        self._request_modifier_restart()
         self.state.song_mods.song_speed = effect_strength
         await self._modify_song_playback(
             interaction, f"Speed set to {effect_strength}"
@@ -497,7 +478,7 @@ class Event:
 
 class SongMods:
     def __init__(self):
-        self.is_song_modified: bool = False
+        self.modifier_restart_pending: bool = False
         self.song_bass: float | None = None
         self.song_loop: bool = False
         self.song_loop_all: bool = False
@@ -568,17 +549,13 @@ class SongMods:
         self.start_timestamp: float | None = None
         self.position_offset_s: float = 0.0
         self.volume: float = 1.0
-        self.is_song_modified = False
+        self.modifier_restart_pending = False
 
 
 @dataclass
 class GuildPlaybackState:
     active_song: Song | None = None
     songs: list[Song] = field(default_factory=list)
-    song_cache: dict[str, str] = field(default_factory=dict)
-    """
-    Key is webpage_url, value is the source
-    """
     song_mods: SongMods = field(default_factory=SongMods)
     source: PCMVolumeTransformer[FFmpegPCMAudio] | None = None
     text_channel: TextChannel | None = None
@@ -586,7 +563,7 @@ class GuildPlaybackState:
 
 
 def _song_mod_to_ffmpeg_str(
-    mod_type: Literal["pitch", "speed", "bass", "off"],
+    mod_type: Literal["pitch", "speed", "bass"],
     effect_strength: float,
 ) -> str:
     """
@@ -600,5 +577,3 @@ def _song_mod_to_ffmpeg_str(
         return f",atempo={effect_strength}"
     if mod_type == "bass":
         return f",bass=g={effect_strength}"
-    if mod_type == "off":
-        return ""

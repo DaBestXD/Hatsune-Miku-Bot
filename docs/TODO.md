@@ -8,17 +8,6 @@
 
 ## Code review findings
 
-(Medium) [`src/hatsune_miku_bot/audio/guild_state_controller.py:380`]
-
-- Description: Modifier commands received before the asynchronous stop callback each insert another active-song copy and repeatedly count the same elapsed playback interval. Rapid nightcore, bass, and speed changes can repeat the song and seek too far forward.
-- Suggested fix: Coalesce changes while a modifier restart is pending. Prefer an explicit restart state that does not mutate the song queue, and snapshot elapsed time only once per interruption.
-
-(Medium) [`src/hatsune_miku_bot/audio/guild_state_controller.py:236`]
-
-- Description: A 403 immediately after an effect change enters stale-source recovery before the modified-playback queue transition, leaving the inserted active-song copy to play again.
-- Suggested fix: Have stale-source recovery consume or collapse a pending modifier restart, or remove the queue-copy restart design.
-
-
 (Medium) [`.github/workflows/deploy.yml:46`]
 
 - Description: `StrictHostKeyChecking=no` disables SSH server identity verification during deployment.
@@ -28,11 +17,6 @@
 
 - Description: Deployment removes the running container before building its replacement. A failed build leaves the bot offline.
 - Suggested fix: Build before replacing the running container; use `docker compose up -d --build` without an unconditional preceding `down`.
-
-(Low) [`src/hatsune_miku_bot/audio/guild_state_controller.py:110`]
-
-- Description: Cache-removal tasks are untracked. After guild removal stops the controller, tasks can remain alive for 30 minutes and then enqueue events with no consumer.
-- Suggested fix: Track delayed tasks per controller, deduplicate them by URL, and cancel/gather them during controller and cog cleanup.
 
 (Low) [`.github/workflows/deploy.yml:29`]
 
@@ -45,11 +29,6 @@
 - Learn and configure GitHub branch protection for `main`. Require changes to arrive through pull requests and require the CI status check before merging; block force pushes and branch deletion. Approvals can remain optional while the repository has a single maintainer.
 
 ### Test coverage gaps
-
-(Medium) [`tests/test_guild_state_controller.py:432`]
-
-- Description: Modifier tests do not process multiple queued modifier events before `after_callback`, a modifier followed by 403 recovery, or a modifier while `song_loop_all` is active.
-- Suggested fix: Add event-ordering regressions for all three state transitions and assert queue identity/count and playback offset.
 
 (Low) [`tests/test_audio_resolver.py:129`]
 

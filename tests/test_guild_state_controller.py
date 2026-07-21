@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import unittest
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import hatsune_miku_bot.audio.guild_state_controller as controller_module
+import hatsune_miku_bot.audio.song_cache as song_cache_module
 from hatsune_miku_bot.audio.guild_state_controller import (
     Event,
     GuildStateController,
     SongMods,
-    _song_mod_to_ffmpeg_str,
 )
+from hatsune_miku_bot.audio.song_cache import CachedSong
 from hatsune_miku_bot.audio.song_playlist_classes import Playlist, Song
 
 
@@ -87,40 +89,37 @@ class EventLoopTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CacheAndQueueTests(unittest.IsolatedAsyncioTestCase):
-    async def test_get_expiry_from_source_returns_removal_delay(
-        self,
-    ) -> None:
+    async def test_song_cache_lazily_deletes_expired_entries(self) -> None:
         controller = make_controller()
 
-        with patch.object(controller_module.time, "time", return_value=1000):
-            self.assertEqual(
-                controller.get_expiry_from_source(
-                    "https://googlevideo.test/audio?expire=4600"
-                ),
-                3300,
+        with patch.object(song_cache_module.time, "time", return_value=1000):
+            cached_song = CachedSong(
+                "https://googlevideo.test/audio?expire=1400"
             )
+            await controller.song_cache.add_key("song", cached_song)
             self.assertEqual(
-                controller.get_expiry_from_source(
-                    "https://soundcloud.cloud/audio?expires=2800"
-                ),
-                1500,
+                await controller.song_cache.get("song"), cached_song.source
             )
+
+        with patch.object(song_cache_module.time, "time", return_value=1101):
+            self.assertIsNone(await controller.song_cache.get("song"))
+
+        self.assertEqual(await controller.song_cache.get_size(), 0)
+
+    async def test_cached_song_default_expiry_is_set_at_creation(self) -> None:
+        controller = make_controller()
+
+        with patch.object(song_cache_module.time, "time", return_value=1000):
+            cached_song = CachedSong("https://audio.test/source")
+            await controller.song_cache.add_key("song", cached_song)
+
+        self.assertEqual(cached_song.expiry, 2800)
+        with patch.object(song_cache_module.time, "time", return_value=2799):
             self.assertEqual(
-                controller.get_expiry_from_source(
-                    "https://googlevideo.test/audio?expire=900"
-                ),
-                0,
+                await controller.song_cache.get("song"), cached_song.source
             )
-            self.assertEqual(
-                controller.get_expiry_from_source("https://audio.test/source"),
-                1800,
-            )
-            self.assertEqual(
-                controller.get_expiry_from_source(
-                    "https://audio.test/source?expire=invalid"
-                ),
-                1800,
-            )
+        with patch.object(song_cache_module.time, "time", return_value=2801):
+            self.assertIsNone(await controller.song_cache.get("song"))
 
     async def test_cache_song_records_only_resolved_sources(self) -> None:
         controller = make_controller()
@@ -136,35 +135,23 @@ class CacheAndQueueTests(unittest.IsolatedAsyncioTestCase):
             await controller.cache_song(bad)
 
         self.assertEqual(
-            controller.state.song_cache,
-            {good.webpage_url: "https://audio.test/good"},
+            await controller.song_cache.get(good.webpage_url),
+            "https://audio.test/good",
         )
+        self.assertIsNone(await controller.song_cache.get(bad.webpage_url))
+        self.assertEqual(await controller.song_cache.get_size(), 1)
 
-    async def test_remove_song_from_cache_handles_present_and_missing_keys(
+    async def test_delete_key_handles_present_and_missing_keys(
         self,
     ) -> None:
         controller = make_controller()
-        controller.state.song_cache["song"] = "source"
+        await controller.song_cache.add_key("song", CachedSong("source"))
 
-        await controller.remove_song_from_cache("song")
-        await controller.remove_song_from_cache("song")
+        await controller.song_cache.delete_key("song")
+        await controller.song_cache.delete_key("song")
 
-        self.assertEqual(controller.state.song_cache, {})
-
-    async def test_old_removal_timer_preserves_refreshed_source(self) -> None:
-        controller = make_controller()
-        song_url = "https://song.test/refreshed"
-        controller.state.song_cache[song_url] = "https://audio.test/new"
-
-        await controller.remove_song_from_cache(
-            song_url,
-            "https://audio.test/old",
-        )
-
-        self.assertEqual(
-            controller.state.song_cache,
-            {song_url: "https://audio.test/new"},
-        )
+        self.assertIsNone(await controller.song_cache.get("song"))
+        self.assertEqual(await controller.song_cache.get_size(), 0)
 
     async def test_queue_songs_adds_song_and_playlist_and_schedules_cache(
         self,
@@ -209,8 +196,9 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
             play=Mock(),
         )
         controller.state.songs = [song]
-        controller.state.song_cache[song.webpage_url] = (
-            "https://audio.test/cached"
+        await controller.song_cache.add_key(
+            song.webpage_url,
+            CachedSong("https://audio.test/cached"),
         )
         controller.state.text_channel = as_any(channel)
         controller.state.vc = as_any(vc)
@@ -243,8 +231,7 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
         vc = SimpleNamespace(is_playing=Mock(return_value=False), play=Mock())
         controller.state.songs = [song]
         controller.state.vc = as_any(vc)
-        source = "https://googlevideo.test/fresh?expire=4600"
-        scheduled_removal = Mock(return_value=object())
+        source = "https://googlevideo.test/fresh"
 
         with (
             patch.object(
@@ -257,28 +244,13 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
                 "to_thread",
                 new=AsyncMock(return_value=SimpleNamespace(volume=1.0)),
             ),
-            patch.object(controller_module.time, "time", return_value=1000),
-            patch.object(
-                controller,
-                "schedule_removal_from_cache",
-                new=scheduled_removal,
-            ),
-            patch.object(
-                controller_module.asyncio, "create_task"
-            ) as create_task,
         ):
             await controller.begin_playback()
 
         self.assertEqual(
-            controller.state.song_cache[song.webpage_url],
+            await controller.song_cache.get(song.webpage_url),
             source,
         )
-        scheduled_removal.assert_called_once_with(
-            song.webpage_url,
-            source,
-            3300,
-        )
-        create_task.assert_called_once_with(scheduled_removal.return_value)
         vc.play.assert_called_once()
 
     async def test_stale_cache_retry_does_not_announce_or_count_twice(
@@ -294,8 +266,9 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
         controller.state.songs = [song]
         controller.state.text_channel = as_any(channel)
         controller.state.vc = as_any(vc)
-        controller.state.song_cache[song.webpage_url] = (
-            "https://audio.test/stale"
+        await controller.song_cache.add_key(
+            song.webpage_url,
+            CachedSong("https://audio.test/stale"),
         )
 
         with (
@@ -324,7 +297,7 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
             controller.db_logic
         ).insert_song_playback.assert_awaited_once_with(song, controller.id)
         self.assertEqual(
-            controller.state.song_cache[song.webpage_url],
+            await controller.song_cache.get(song.webpage_url),
             "https://audio.test/fresh",
         )
         self.assertEqual(controller.queue.qsize(), 0)
@@ -409,10 +382,14 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
                 controller = make_controller()
                 controller.state.songs = [first, second]
                 controller.state.active_song = first
-                controller.state.song_cache = {
-                    first.webpage_url: "https://audio.test/stale",
-                    second.webpage_url: "https://audio.test/second",
-                }
+                await controller.song_cache.add_key(
+                    first.webpage_url,
+                    CachedSong("https://audio.test/stale"),
+                )
+                await controller.song_cache.add_key(
+                    second.webpage_url,
+                    CachedSong("https://audio.test/second"),
+                )
                 controller.state.song_mods.song_loop = song_loop
                 controller.state.song_mods.song_loop_all = song_loop_all
                 controller.state.song_mods.start_timestamp = 10.0
@@ -422,11 +399,14 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
 
                 self.assertEqual(controller.state.songs, [first, second])
                 self.assertIs(controller.state.active_song, first)
-                self.assertNotIn(first.webpage_url, controller.state.song_cache)
-                self.assertEqual(
-                    controller.state.song_cache,
-                    {second.webpage_url: "https://audio.test/second"},
+                self.assertIsNone(
+                    await controller.song_cache.get(first.webpage_url)
                 )
+                self.assertEqual(
+                    await controller.song_cache.get(second.webpage_url),
+                    "https://audio.test/second",
+                )
+                self.assertEqual(await controller.song_cache.get_size(), 1)
                 self.assertIsNone(controller.state.song_mods.start_timestamp)
                 self.assertEqual(
                     controller.state.song_mods.position_offset_s, 0
@@ -471,7 +451,9 @@ class QueueMutationTests(unittest.IsolatedAsyncioTestCase):
         controller.state.active_song = song
         controller.state.text_channel = as_any(FakeTextChannel())
         controller.state.vc = as_any(vc)
-        controller.state.song_cache[song.webpage_url] = "cached"
+        await controller.song_cache.add_key(
+            song.webpage_url, CachedSong("cached")
+        )
         controller.state.source = as_any(SimpleNamespace(volume=1.0))
         controller.state.song_mods.volume = 0.5
         controller.state.song_mods.song_loop = True
@@ -487,8 +469,9 @@ class QueueMutationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(controller.state.vc)
         self.assertIsNone(controller.state.source)
         self.assertEqual(
-            controller.state.song_cache, {song.webpage_url: "cached"}
+            await controller.song_cache.get(song.webpage_url), "cached"
         )
+        self.assertEqual(await controller.song_cache.get_size(), 1)
         self.assertEqual(controller.state.song_mods.volume, 1.0)
         self.assertFalse(controller.state.song_mods.song_loop)
         vc.stop.assert_called_once_with()
@@ -570,7 +553,6 @@ class SongModificationTests(unittest.IsolatedAsyncioTestCase):
             ",bass=g=10,atempo=1.5,aresample=48000,"
             "asetrate=48000*1.25,aresample=48000",
         )
-        self.assertEqual(_song_mod_to_ffmpeg_str("off", 0), "")
 
     async def test_nightcore_bass_and_speed_snapshot_and_restart_song(
         self,
@@ -589,45 +571,64 @@ class SongModificationTests(unittest.IsolatedAsyncioTestCase):
                 controller_module.time, "monotonic", return_value=110.0
             ),
         ):
-            await controller.nightcore(as_any(object()))
-            await controller.set_bass(as_any(object()), 8.0)
-            await controller.set_speed(as_any(object()), 1.5)
+            await controller.add_event(controller.nightcore, as_any(object()))
+            await controller.add_event(
+                controller.set_bass, as_any(object()), 8.0
+            )
+            await controller.add_event(
+                controller.set_speed, as_any(object()), 1.5
+            )
+            for _ in range(3):
+                event = await controller.queue.get()
+                assert isinstance(event, Event)
+                await event.func_to_execute()
+                controller.queue.task_done()
 
         self.assertEqual(controller.state.song_mods.song_pitch, 1.25)
         self.assertEqual(controller.state.song_mods.song_bass, 8.0)
         self.assertEqual(controller.state.song_mods.song_speed, 1.5)
-        self.assertTrue(controller.state.song_mods.is_song_modified)
-        self.assertEqual(controller.state.songs.count(song), 4)
-        self.assertEqual(vc.stop.call_count, 3)
-
-    async def test_effect_restart_does_not_duplicate_single_loop_queue(
-        self,
-    ) -> None:
-        controller = make_controller()
-        first = make_song("First", "https://song.test/1")
-        second = make_song("Second", "https://song.test/2")
-        vc = SimpleNamespace(stop=Mock())
-        controller.state.songs = [first, second]
-        controller.state.active_song = first
-        controller.state.vc = as_any(vc)
-        controller.state.song_mods.song_loop = True
-        controller.state.song_mods.start_timestamp = 100.0
-
-        with (
-            patch.object(controller_module, "reply", new=AsyncMock()),
-            patch.object(
-                controller_module.time, "monotonic", return_value=110.0
-            ),
-        ):
-            await controller.nightcore(as_any(object()))
+        self.assertTrue(controller.state.song_mods.modifier_restart_pending)
+        self.assertEqual(controller.state.song_mods.position_offset_s, 10.0)
+        self.assertEqual(controller.state.songs, [song])
+        vc.stop.assert_called_once_with()
 
         await controller.finished_playback("")
 
-        self.assertEqual(controller.state.songs, [first, second])
-        self.assertIs(controller.state.active_song, first)
-        self.assertEqual(controller.state.songs.count(first), 1)
-        vc.stop.assert_called_once_with()
+        self.assertEqual(controller.state.songs, [song])
         self.assertEqual(controller.queue.qsize(), 1)
+
+    async def test_effect_restart_does_not_mutate_looping_queue(
+        self,
+    ) -> None:
+        for loop_attribute in ("song_loop", "song_loop_all"):
+            with self.subTest(loop_attribute=loop_attribute):
+                controller = make_controller()
+                first = make_song("First", "https://song.test/1")
+                second = make_song("Second", "https://song.test/2")
+                vc = SimpleNamespace(stop=Mock())
+                controller.state.songs = [first, second]
+                controller.state.active_song = first
+                controller.state.vc = as_any(vc)
+                setattr(controller.state.song_mods, loop_attribute, True)
+                controller.state.song_mods.start_timestamp = 100.0
+
+                with (
+                    patch.object(controller_module, "reply", new=AsyncMock()),
+                    patch.object(
+                        controller_module.time,
+                        "monotonic",
+                        return_value=110.0,
+                    ),
+                ):
+                    await controller.nightcore(as_any(object()))
+
+                await controller.finished_playback("")
+
+                self.assertEqual(controller.state.songs, [first, second])
+                self.assertIs(controller.state.active_song, first)
+                self.assertEqual(controller.state.songs.count(first), 1)
+                vc.stop.assert_called_once_with()
+                self.assertEqual(controller.queue.qsize(), 1)
 
     async def test_song_effect_restart_is_not_logged_as_new_playback(
         self,
@@ -635,19 +636,125 @@ class SongModificationTests(unittest.IsolatedAsyncioTestCase):
         controller = make_controller()
         song = make_song("First", "https://song.test/1")
         built_source = SimpleNamespace(volume=1.0)
-        vc = SimpleNamespace(is_playing=Mock(return_value=False), play=Mock())
+        vc = SimpleNamespace(
+            stop=Mock(), is_playing=Mock(return_value=False), play=Mock()
+        )
         controller.state.songs = [song]
+        controller.state.active_song = song
         controller.state.vc = as_any(vc)
-        controller.state.song_cache[song.webpage_url] = "https://audio.test/1"
-        controller.state.song_mods.is_song_modified = True
+        controller.state.song_mods.start_timestamp = 100.0
+        await controller.song_cache.add_key(
+            song.webpage_url, CachedSong("https://audio.test/1")
+        )
 
-        with patch.object(
-            controller_module.asyncio,
-            "to_thread",
-            new=AsyncMock(return_value=built_source),
+        with (
+            patch.object(controller_module, "reply", new=AsyncMock()),
+            patch.object(
+                controller_module.time, "monotonic", return_value=110.0
+            ),
+            patch.object(
+                controller_module.asyncio,
+                "to_thread",
+                new=AsyncMock(return_value=built_source),
+            ),
         ):
-            await controller.begin_playback()
+            await controller.nightcore(as_any(object()))
+            await controller.finished_playback("")
+            event = await controller.queue.get()
+            assert isinstance(event, Event)
+            await event.func_to_execute()
+            controller.queue.task_done()
 
-        self.assertFalse(controller.state.song_mods.is_song_modified)
+        self.assertFalse(controller.state.song_mods.modifier_restart_pending)
         as_any(controller.db_logic).insert_song_playback.assert_not_awaited()
+        self.assertEqual(controller.state.songs, [song])
+        vc.stop.assert_called_once_with()
+        vc.play.assert_called_once()
+        self.assertEqual(controller.queue.qsize(), 0)
+
+    async def test_modified_restart_403_preserves_captured_position(
+        self,
+    ) -> None:
+        controller = make_controller()
+        first = make_song("First", "https://song.test/1")
+        second = make_song("Second", "https://song.test/2")
+        channel = FakeTextChannel()
+        built_source = SimpleNamespace(volume=1.0)
+        vc = SimpleNamespace(
+            stop=Mock(), is_playing=Mock(return_value=False), play=Mock()
+        )
+        controller.state.songs = [first, second]
+        controller.state.active_song = first
+        controller.state.text_channel = as_any(channel)
+        controller.state.vc = as_any(vc)
+        controller.state.song_mods.start_timestamp = 100.0
+        await controller.song_cache.add_key(
+            first.webpage_url, CachedSong("https://audio.test/stale")
+        )
+
+        with (
+            patch.object(controller_module, "reply", new=AsyncMock()),
+            patch.object(
+                controller_module.time, "monotonic", return_value=110.0
+            ),
+            patch.object(
+                controller_module,
+                "get_audio_source",
+                new=AsyncMock(return_value="https://audio.test/fresh"),
+            ) as get_audio_source,
+            patch.object(
+                controller_module.asyncio,
+                "to_thread",
+                new=AsyncMock(return_value=built_source),
+            ) as to_thread,
+        ):
+            await controller.set_speed(as_any(object()), 1.5)
+            await controller.finished_playback("")
+
+            event = await controller.queue.get()
+            assert isinstance(event, Event)
+            await event.func_to_execute()
+            controller.queue.task_done()
+
+            self.assertFalse(
+                controller.state.song_mods.modifier_restart_pending
+            )
+            self.assertEqual(controller.state.songs, [first, second])
+            self.assertEqual(controller.state.song_mods.position_offset_s, 10.0)
+            self.assertEqual(
+                await controller.song_cache.get(first.webpage_url),
+                "https://audio.test/stale",
+            )
+            get_audio_source.assert_not_awaited()
+
+            stderr_buff = to_thread.await_args_list[0].args[3]
+            assert isinstance(stderr_buff, io.BytesIO)
+            stderr_buff.write(b"HTTP error 403 Forbidden")
+            after_callback = vc.play.call_args.kwargs["after"]
+            after_callback(None)
+
+            completion_event = await asyncio.wait_for(
+                controller.queue.get(), timeout=1
+            )
+            assert isinstance(completion_event, Event)
+            await completion_event.func_to_execute()
+            controller.queue.task_done()
+
+            event = await controller.queue.get()
+            assert isinstance(event, Event)
+            await event.func_to_execute()
+            controller.queue.task_done()
+
+        self.assertEqual(controller.state.songs, [first, second])
+        self.assertEqual(controller.state.songs.count(first), 1)
+        self.assertEqual(
+            await controller.song_cache.get(first.webpage_url),
+            "https://audio.test/fresh",
+        )
+        self.assertFalse(controller.state.song_mods.modifier_restart_pending)
+        as_any(controller.db_logic).insert_song_playback.assert_not_awaited()
+        channel.send.assert_not_awaited()
+        get_audio_source.assert_awaited_once_with(first)
+        vc.stop.assert_called_once_with()
+        self.assertEqual(vc.play.call_count, 2)
         self.assertEqual(controller.queue.qsize(), 0)
