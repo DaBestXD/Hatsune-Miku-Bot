@@ -17,6 +17,7 @@ from hatsune_miku_bot.audio.guild_state_controller import (
 )
 from hatsune_miku_bot.audio.song_cache import CachedSong
 from hatsune_miku_bot.audio.song_playlist_classes import Playlist, Song
+from tests.helpers import module_proxy
 
 
 def as_any(value: object) -> Any:
@@ -93,7 +94,11 @@ class CacheAndQueueTests(unittest.IsolatedAsyncioTestCase):
     async def test_song_cache_lazily_deletes_expired_entries(self) -> None:
         controller = make_controller()
 
-        with patch.object(song_cache_module.time, "time", return_value=1000):
+        with patch.object(
+            song_cache_module,
+            "time",
+            module_proxy(song_cache_module.time, time=Mock(return_value=1000)),
+        ):
             cached_song = CachedSong(
                 "https://googlevideo.test/audio?expire=1400"
             )
@@ -102,7 +107,11 @@ class CacheAndQueueTests(unittest.IsolatedAsyncioTestCase):
                 await controller.song_cache.get("song"), cached_song.source
             )
 
-        with patch.object(song_cache_module.time, "time", return_value=1101):
+        with patch.object(
+            song_cache_module,
+            "time",
+            module_proxy(song_cache_module.time, time=Mock(return_value=1101)),
+        ):
             self.assertIsNone(await controller.song_cache.get("song"))
 
         self.assertEqual(await controller.song_cache.get_size(), 0)
@@ -110,16 +119,28 @@ class CacheAndQueueTests(unittest.IsolatedAsyncioTestCase):
     async def test_cached_song_default_expiry_is_set_at_creation(self) -> None:
         controller = make_controller()
 
-        with patch.object(song_cache_module.time, "time", return_value=1000):
+        with patch.object(
+            song_cache_module,
+            "time",
+            module_proxy(song_cache_module.time, time=Mock(return_value=1000)),
+        ):
             cached_song = CachedSong("https://audio.test/source")
             await controller.song_cache.add_key("song", cached_song)
 
         self.assertEqual(cached_song.expiry, 2800)
-        with patch.object(song_cache_module.time, "time", return_value=2799):
+        with patch.object(
+            song_cache_module,
+            "time",
+            module_proxy(song_cache_module.time, time=Mock(return_value=2799)),
+        ):
             self.assertEqual(
                 await controller.song_cache.get("song"), cached_song.source
             )
-        with patch.object(song_cache_module.time, "time", return_value=2801):
+        with patch.object(
+            song_cache_module,
+            "time",
+            module_proxy(song_cache_module.time, time=Mock(return_value=2801)),
+        ):
             self.assertIsNone(await controller.song_cache.get("song"))
 
     async def test_cache_song_records_only_resolved_sources(self) -> None:
@@ -206,15 +227,25 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                controller_module.asyncio,
-                "to_thread",
-                new=AsyncMock(return_value=built_source),
-            ) as to_thread,
+                controller_module,
+                "asyncio",
+                module_proxy(
+                    controller_module.asyncio,
+                    to_thread=AsyncMock(return_value=built_source),
+                ),
+            ) as asyncio_proxy,
             patch.object(
-                controller_module.time, "monotonic", return_value=100.0
+                controller_module,
+                "time",
+                module_proxy(
+                    controller_module.time,
+                    monotonic=Mock(return_value=100.0),
+                ),
             ),
         ):
             await controller.begin_playback()
+
+        to_thread = asyncio_proxy.to_thread
 
         self.assertIs(controller.state.active_song, song)
         self.assertIs(controller.state.source, built_source)
@@ -241,9 +272,14 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=source),
             ),
             patch.object(
-                controller_module.asyncio,
-                "to_thread",
-                new=AsyncMock(return_value=SimpleNamespace(volume=1.0)),
+                controller_module,
+                "asyncio",
+                module_proxy(
+                    controller_module.asyncio,
+                    to_thread=AsyncMock(
+                        return_value=SimpleNamespace(volume=1.0)
+                    ),
+                ),
             ),
         ):
             await controller.begin_playback()
@@ -279,9 +315,14 @@ class PlaybackTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value="https://audio.test/fresh"),
             ),
             patch.object(
-                controller_module.asyncio,
-                "to_thread",
-                new=AsyncMock(return_value=SimpleNamespace(volume=1.0)),
+                controller_module,
+                "asyncio",
+                module_proxy(
+                    controller_module.asyncio,
+                    to_thread=AsyncMock(
+                        return_value=SimpleNamespace(volume=1.0)
+                    ),
+                ),
             ),
         ):
             await controller.begin_playback()
@@ -577,7 +618,12 @@ class QueueMutationTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(controller_module, "reply", new=AsyncMock()),
             patch.object(
-                controller_module.random, "shuffle", side_effect=reverse
+                controller_module,
+                "random",
+                module_proxy(
+                    controller_module.random,
+                    shuffle=Mock(side_effect=reverse),
+                ),
             ),
         ):
             await controller.shuffle(as_any(object()))
@@ -626,7 +672,12 @@ class SongModificationTests(unittest.IsolatedAsyncioTestCase):
         mods.position_offset_s = 30.0
 
         with patch.object(
-            controller_module.time, "monotonic", return_value=110.0
+            controller_module,
+            "time",
+            module_proxy(
+                controller_module.time,
+                monotonic=Mock(return_value=110.0),
+            ),
         ):
             position = mods.interrupt_time()
 
@@ -654,7 +705,12 @@ class SongModificationTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(controller_module, "reply", new=AsyncMock()),
             patch.object(
-                controller_module.time, "monotonic", return_value=110.0
+                controller_module,
+                "time",
+                module_proxy(
+                    controller_module.time,
+                    monotonic=Mock(return_value=110.0),
+                ),
             ),
         ):
             await controller.add_event(controller.nightcore, as_any(object()))
@@ -701,9 +757,12 @@ class SongModificationTests(unittest.IsolatedAsyncioTestCase):
                 with (
                     patch.object(controller_module, "reply", new=AsyncMock()),
                     patch.object(
-                        controller_module.time,
-                        "monotonic",
-                        return_value=110.0,
+                        controller_module,
+                        "time",
+                        module_proxy(
+                            controller_module.time,
+                            monotonic=Mock(return_value=110.0),
+                        ),
                     ),
                 ):
                     await controller.nightcore(as_any(object()))
@@ -736,12 +795,20 @@ class SongModificationTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(controller_module, "reply", new=AsyncMock()),
             patch.object(
-                controller_module.time, "monotonic", return_value=110.0
+                controller_module,
+                "time",
+                module_proxy(
+                    controller_module.time,
+                    monotonic=Mock(return_value=110.0),
+                ),
             ),
             patch.object(
-                controller_module.asyncio,
-                "to_thread",
-                new=AsyncMock(return_value=built_source),
+                controller_module,
+                "asyncio",
+                module_proxy(
+                    controller_module.asyncio,
+                    to_thread=AsyncMock(return_value=built_source),
+                ),
             ),
         ):
             await controller.nightcore(as_any(object()))
@@ -781,7 +848,12 @@ class SongModificationTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(controller_module, "reply", new=AsyncMock()),
             patch.object(
-                controller_module.time, "monotonic", return_value=110.0
+                controller_module,
+                "time",
+                module_proxy(
+                    controller_module.time,
+                    monotonic=Mock(return_value=110.0),
+                ),
             ),
             patch.object(
                 controller_module,
@@ -789,11 +861,15 @@ class SongModificationTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value="https://audio.test/fresh"),
             ) as get_audio_source,
             patch.object(
-                controller_module.asyncio,
-                "to_thread",
-                new=AsyncMock(return_value=built_source),
-            ) as to_thread,
+                controller_module,
+                "asyncio",
+                module_proxy(
+                    controller_module.asyncio,
+                    to_thread=AsyncMock(return_value=built_source),
+                ),
+            ) as asyncio_proxy,
         ):
+            to_thread = asyncio_proxy.to_thread
             await controller.set_speed(as_any(object()), 1.5)
             await controller.finished_playback("")
 

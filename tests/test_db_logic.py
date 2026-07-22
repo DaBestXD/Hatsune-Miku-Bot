@@ -19,16 +19,13 @@ class DBLogicTests(unittest.IsolatedAsyncioTestCase):
     @override
     async def asyncSetUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
         self.db_path = Path(self.temp_dir.name) / "playback.sqlite3"
         self.db_path_patch = patch.object(db_main, "DB_PATH", self.db_path)
         self.db_path_patch.start()
+        self.addCleanup(self.db_path_patch.stop)
         self.db = await DBLogic.async_init()
-
-    @override
-    async def asyncTearDown(self) -> None:
-        await self.db.close()
-        self.db_path_patch.stop()
-        self.temp_dir.cleanup()
+        self.addAsyncCleanup(self.db.close)
 
     async def test_async_init_creates_playback_schema(self) -> None:
         cursor = await self.db.con.execute("PRAGMA table_info(song_playback)")

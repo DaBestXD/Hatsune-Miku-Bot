@@ -126,12 +126,11 @@ class GuildStateController:
             await reply(interaction, embed=item_to_add.return_embed())
         else:
             self.state.songs.append(item_to_add)
-            next_song = (
-                self.state.songs[1] if len(self.state.songs) >= 2 else None
-            )
             await reply(
                 interaction,
-                embed=item_to_add.return_embed(next_song, queued=True),
+                embed=item_to_add.return_embed(
+                    self.state.next_song, queued=True
+                ),
             )
         await self.add_event(self.begin_song_cache)
 
@@ -217,11 +216,10 @@ class GuildStateController:
                 self.state.active_song, self.id
             )
             if self.state.text_channel:
-                next_song = (
-                    self.state.songs[1] if len(self.state.songs) >= 2 else None
-                )
                 await self.state.text_channel.send(
-                    embed=self.state.active_song.return_embed(next_song)
+                    embed=self.state.active_song.return_embed(
+                        self.state.next_song
+                    )
                 )
             else:
                 logger.warning(
@@ -317,11 +315,12 @@ class GuildStateController:
         return None
 
     async def skip(self, interaction: Interaction) -> None:
-        next_song = self.state.songs[1] if len(self.state.songs) >= 2 else None
         if self.state.active_song:
             await reply(
                 interaction,
-                embed=self.state.active_song.return_skip_embed(next_song),
+                embed=self.state.active_song.return_skip_embed(
+                    self.state.next_song
+                ),
             )
         self.state.song_mods.song_loop = False
         self.state.song_mods.modifier_restart_pending = False
@@ -560,6 +559,10 @@ class GuildPlaybackState:
     source: PCMVolumeTransformer[FFmpegPCMAudio] | None = None
     text_channel: TextChannel | None = None
     vc: VoiceClient | None = None
+
+    @property
+    def next_song(self) -> Song | None:
+        return self.songs[1] if len(self.songs) > 1 else None
 
 
 def _song_mod_to_ffmpeg_str(

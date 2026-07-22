@@ -11,6 +11,7 @@ from yt_dlp.utils import DownloadError
 
 import hatsune_miku_bot.audio.audio_resolver as resolver
 from hatsune_miku_bot.audio.song_playlist_classes import Playlist, Song
+from tests.helpers import module_proxy
 
 
 def as_any(value: object) -> Any:
@@ -78,7 +79,11 @@ class SpotifyRequestTests(unittest.IsolatedAsyncioTestCase):
         audio_resolver.client_secret = "secret"
         audio_resolver.token = "cached"
         audio_resolver.token_expiry = 10_000
-        with patch.object(resolver.time, "time", return_value=100):
+        with patch.object(
+            resolver,
+            "time",
+            module_proxy(resolver.time, time=Mock(return_value=100)),
+        ):
             await audio_resolver.get_token()
         client.post.assert_not_called()
 
@@ -104,11 +109,25 @@ class SpotifyRequestTests(unittest.IsolatedAsyncioTestCase):
         audio_resolver.client_secret = "secret"
 
         with (
-            patch.object(resolver.asyncio, "sleep", new=AsyncMock()) as sleep,
-            patch.object(resolver.random, "randint", return_value=60),
-            patch.object(resolver.time, "time", return_value=100),
+            patch.object(
+                resolver,
+                "asyncio",
+                module_proxy(resolver.asyncio, sleep=AsyncMock()),
+            ) as asyncio_proxy,
+            patch.object(
+                resolver,
+                "random",
+                module_proxy(resolver.random, randint=Mock(return_value=60)),
+            ),
+            patch.object(
+                resolver,
+                "time",
+                module_proxy(resolver.time, time=Mock(return_value=100)),
+            ),
         ):
             await audio_resolver.get_token()
+
+        sleep = asyncio_proxy.sleep
 
         self.assertEqual(audio_resolver.token, "new-token")
         self.assertEqual(audio_resolver.token_expiry, 3640)
@@ -167,8 +186,16 @@ class SpotifyRequestTests(unittest.IsolatedAsyncioTestCase):
         audio_resolver.token_expiry = float("inf")
 
         with (
-            patch.object(resolver.time, "time", return_value=100),
-            patch.object(resolver.random, "randint", return_value=60),
+            patch.object(
+                resolver,
+                "time",
+                module_proxy(resolver.time, time=Mock(return_value=100)),
+            ),
+            patch.object(
+                resolver,
+                "random",
+                module_proxy(resolver.random, randint=Mock(return_value=60)),
+            ),
         ):
             result = await audio_resolver.spotify_get_request(
                 "https://api.spotify.test/track/1", {"market": "US"}
@@ -213,13 +240,22 @@ class SpotifyRequestTests(unittest.IsolatedAsyncioTestCase):
         audio_resolver.token_expiry = float("inf")
 
         with (
-            patch.object(resolver.asyncio, "sleep", new=AsyncMock()) as sleep,
-            patch.object(resolver.random, "randint", return_value=5),
+            patch.object(
+                resolver,
+                "asyncio",
+                module_proxy(resolver.asyncio, sleep=AsyncMock()),
+            ) as asyncio_proxy,
+            patch.object(
+                resolver,
+                "random",
+                module_proxy(resolver.random, randint=Mock(return_value=5)),
+            ),
         ):
             result = await audio_resolver.spotify_get_request(
                 "https://api.spotify.test/track/1", {"market": "US"}
             )
 
+        sleep = asyncio_proxy.sleep
         self.assertEqual(result, {"name": "Miku"})
         self.assertEqual(client.get.call_count, 2)
         sleep.assert_awaited_once_with(12)
@@ -239,13 +275,22 @@ class SpotifyRequestTests(unittest.IsolatedAsyncioTestCase):
         audio_resolver.token_expiry = float("inf")
 
         with (
-            patch.object(resolver.asyncio, "sleep", new=AsyncMock()) as sleep,
-            patch.object(resolver.random, "randint", return_value=5),
+            patch.object(
+                resolver,
+                "asyncio",
+                module_proxy(resolver.asyncio, sleep=AsyncMock()),
+            ) as asyncio_proxy,
+            patch.object(
+                resolver,
+                "random",
+                module_proxy(resolver.random, randint=Mock(return_value=5)),
+            ),
         ):
             result = await audio_resolver.spotify_get_request(
                 "https://api.spotify.test/track/1", {"market": "US"}
             )
 
+        sleep = asyncio_proxy.sleep
         self.assertIsNone(result)
         self.assertEqual(client.get.call_count, 3)
         self.assertEqual(sleep.await_args_list, [call(7), call(7)])
@@ -432,11 +477,18 @@ class SpotifyRequestTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                resolver.time,
+                resolver,
                 "time",
-                side_effect=[100, 201, 201, 201],
+                module_proxy(
+                    resolver.time,
+                    time=Mock(side_effect=[100, 201, 201, 201]),
+                ),
             ),
-            patch.object(resolver.random, "randint", return_value=60),
+            patch.object(
+                resolver,
+                "random",
+                module_proxy(resolver.random, randint=Mock(return_value=60)),
+            ),
         ):
             result = await audio_resolver.spotify_get_paginated_request(
                 "https://api.spotify.test/tracks", {"market": "US"}
@@ -470,8 +522,14 @@ class ResolverRoutingTests(unittest.IsolatedAsyncioTestCase):
         expected = spotify_song()
 
         with patch.object(
-            resolver.asyncio, "to_thread", new=AsyncMock(return_value=expected)
-        ) as to_thread:
+            resolver,
+            "asyncio",
+            module_proxy(
+                resolver.asyncio,
+                to_thread=AsyncMock(return_value=expected),
+            ),
+        ) as asyncio_proxy:
+            to_thread = asyncio_proxy.to_thread
             self.assertIs(
                 await audio_resolver.get_song_info("miku song"), expected
             )
@@ -500,10 +558,14 @@ class ResolverRoutingTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(url=url):
                 method = getattr(audio_resolver, method_name)
                 with patch.object(
-                    resolver.asyncio,
-                    "to_thread",
-                    new=AsyncMock(return_value=expected),
-                ) as to_thread:
+                    resolver,
+                    "asyncio",
+                    module_proxy(
+                        resolver.asyncio,
+                        to_thread=AsyncMock(return_value=expected),
+                    ),
+                ) as asyncio_proxy:
+                    to_thread = asyncio_proxy.to_thread
                     self.assertIs(
                         await audio_resolver.get_song_info(url), expected
                     )
@@ -514,8 +576,11 @@ class ResolverRoutingTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch.object(
-            resolver.asyncio, "to_thread", new=AsyncMock()
-        ) as to_thread:
+            resolver,
+            "asyncio",
+            module_proxy(resolver.asyncio, to_thread=AsyncMock()),
+        ) as asyncio_proxy:
+            to_thread = asyncio_proxy.to_thread
             self.assertIsNone(
                 await audio_resolver.get_song_info(
                     "https://on.soundcloud.com/short-link"

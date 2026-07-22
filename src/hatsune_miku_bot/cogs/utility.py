@@ -14,7 +14,7 @@ from hatsune_miku_bot.utils.discord_helpers import (
 class UtilityCommands(commands.Cog):
     """
     Bot util commands
-    Cogname: utilcommands
+    Cogname: UtilityCommands
     """
 
     def __init__(self, bot: commands.Bot) -> None:

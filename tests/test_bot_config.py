@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-import importlib
 import os
+import runpy
 import unittest
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, Mock, call, patch
+from unittest.mock import AsyncMock, Mock, call, create_autospec, patch
 
 from discord.app_commands import AppCommandError, CheckFailure
 
 import hatsune_miku_bot.bot_config.client as client_module
-import hatsune_miku_bot.bot_config.constants as constants
 import hatsune_miku_bot.bot_config.logging_config as logging_config
 import hatsune_miku_bot.bot_config.paths as paths
+from tests.helpers import module_proxy
 
 
 def as_any(value: object) -> Any:
@@ -29,35 +29,31 @@ class ConstantsAndPathsTests(unittest.TestCase):
         self.assertEqual(paths.ENV_PATH, paths.PROJECT_ROOT / ".env")
 
     def test_constants_parse_optional_user_id_from_environment(self) -> None:
-        original_environment = os.environ.copy()
-        try:
-            with (
-                patch.dict(
-                    os.environ,
-                    {
-                        "DISCORD_TOKEN": "test-token",
-                        "GUILD_ID": "123",
-                        "USER_ID": "456",
-                    },
-                    clear=True,
-                ),
-                patch("dotenv.load_dotenv", return_value=False),
-            ):
-                reloaded = importlib.reload(constants)
-                self.assertEqual(reloaded.DISCORD_TOKEN, "test-token")
-                self.assertEqual(reloaded.GUILD_ID, "123")
-                self.assertEqual(reloaded.USER_ID, 456)
-                self.assertEqual(reloaded.GUILD_OBJECT.id, 123)
-        finally:
-            os.environ.clear()
-            os.environ.update(original_environment)
-            importlib.reload(constants)
+        constants_path = paths.PACKAGE_ROOT / "bot_config" / "constants.py"
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "DISCORD_TOKEN": "test-token",
+                    "GUILD_ID": "123",
+                    "USER_ID": "456",
+                },
+                clear=True,
+            ),
+            patch("dotenv.load_dotenv", autospec=True, return_value=False),
+        ):
+            loaded = runpy.run_path(str(constants_path))
+
+        self.assertEqual(loaded["DISCORD_TOKEN"], "test-token")
+        self.assertEqual(loaded["GUILD_ID"], "123")
+        self.assertEqual(loaded["USER_ID"], 456)
+        self.assertEqual(loaded["GUILD_OBJECT"].id, 123)
 
 
 class LoggingConfigTests(unittest.TestCase):
     def test_logger_config_builds_file_and_console_handlers(self) -> None:
-        file_handler = Mock()
-        stream_handler = Mock()
+        file_handler = Mock(spec_set=logging_config.logging.Handler)
+        stream_handler = Mock(spec_set=logging_config.logging.Handler)
 
         # Directory creation is tested separately from handler wiring to avoid
         # touching the real logs directory.
@@ -66,22 +62,30 @@ class LoggingConfigTests(unittest.TestCase):
         fake_log_dir.__truediv__ = Mock(return_value=fake_log_path)
         fake_root = Mock()
         fake_root.__truediv__ = Mock(return_value=fake_log_dir)
+        stream_handler_class = create_autospec(
+            logging_config.logging.StreamHandler,
+            return_value=stream_handler,
+        )
+        basic_config = create_autospec(logging_config.logging.basicConfig)
+        get_logger = create_autospec(
+            logging_config.logging.getLogger,
+            return_value=Mock(spec_set=logging_config.logging.Logger),
+        )
+        logging_proxy = module_proxy(
+            logging_config.logging,
+            StreamHandler=stream_handler_class,
+            basicConfig=basic_config,
+            getLogger=get_logger,
+        )
         with (
             patch.object(logging_config, "PROJECT_ROOT", fake_root),
+            patch.object(logging_config, "logging", logging_proxy),
             patch.object(
                 logging_config,
                 "RotatingFileHandler",
+                autospec=True,
                 return_value=file_handler,
             ) as rotating_file_handler,
-            patch.object(
-                logging_config.logging,
-                "StreamHandler",
-                return_value=stream_handler,
-            ),
-            patch.object(logging_config.logging, "basicConfig") as basic_config,
-            patch.object(
-                logging_config.logging, "getLogger", return_value=Mock()
-            ),
         ):
             logging_config.logger_config()
 
