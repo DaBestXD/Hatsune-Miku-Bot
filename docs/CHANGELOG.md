@@ -5,6 +5,29 @@
 User-facing changes and developer-facing internal changes are tracked together.
 Dates are listed without release versions for now.
 
+## 2026-07-23
+
+### Added
+
+- Added structured JSON logging with `--json_logging` and production log filtering with `--prod_enabled`, while retaining color-formatted development logs.
+
+### Changed
+
+- Reduced Spotify-to-YouTube Music matching from three candidates to two to shorten audio source resolution.
+- Updated the Docker image to start with production JSON logging and configured Docker Compose to rotate container JSON logs.
+
+### Fixed
+
+- Fixed Spotify playlist parsing for nested track payloads, skipped unavailable or malformed playlist entries, and allowed Spotify tracks without album artwork.
+
+### Internal
+
+- Replaced direct synchronous logging setup with centralized JSON configuration and queue-backed console and rotating-file handlers.
+- Added structured event context throughout Discord lifecycle handling, music commands, audio resolution, playback control, and song caching.
+- Added logging coverage for color and JSON output, startup flag configuration, and Discord disconnect/reconnect events.
+- Added a yt-dlp-compatible logger adapter to every metadata, search, and audio-source resolver configuration.
+- Disabled yt-dlp library output with a dedicated null handler and no propagation so it does not reach the bot's console or rotating file logs.
+
 ## 2026-07-21
 
 ### Fixed

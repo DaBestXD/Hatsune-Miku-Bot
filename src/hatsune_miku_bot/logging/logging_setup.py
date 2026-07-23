@@ -10,6 +10,8 @@ from logging.handlers import QueueHandler, QueueListener
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, override
 
+from yt_dlp import YoutubeDL
+
 from hatsune_miku_bot.bot_config.paths import PROJECT_ROOT
 
 if TYPE_CHECKING:
@@ -81,6 +83,22 @@ class JsonFormatter(logging.Formatter):
                 output[output_key] = value
 
         return json.dumps(output, ensure_ascii=False, default=str)
+
+
+class YTDLPLogger:
+    _yt_dlp_logger = logging.getLogger("yt_dlp")
+
+    def __init__(self, ydl: YoutubeDL | None = None) -> None: ...
+
+    def debug(self, message: str) -> None: ...
+    def info(self, message: str) -> None: ...
+    def warning(
+        self, message: str, *, once: bool = False, only_once: bool = False
+    ) -> None: ...
+    def error(self, message: str) -> None: ...
+
+    def stdout(self, message: str) -> None: ...
+    def stderr(self, message: str) -> None: ...
 
 
 class MikuQueueHandler(QueueHandler):

@@ -64,6 +64,9 @@
       "encoding": "utf-8",
       "delay": true
     },
+    "null": {
+      "class": "logging.NullHandler"
+    },
     "mikuqueue": {
       "class": "hatsune_miku_bot.logging.logging_setup.MikuQueueHandler",
       "handlers": [
@@ -86,6 +89,13 @@
     "aiosqlite": {
       "level": "WARNING",
       "propagate": true
+    },
+    "yt_dlp": {
+      "level": "DEBUG",
+      "handlers": [
+        "null"
+      ],
+      "propagate": false
     }
   }
 }

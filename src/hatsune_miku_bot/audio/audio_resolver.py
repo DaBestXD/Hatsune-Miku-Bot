@@ -15,6 +15,7 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, PagedList
 
 from hatsune_miku_bot.audio.song_playlist_classes import Playlist, Song
+from hatsune_miku_bot.logging.logging_setup import YTDLPLogger
 
 if TYPE_CHECKING:
     from yt_dlp import _Params
@@ -23,7 +24,7 @@ else:
 
 logger = logging.getLogger(__name__)
 
-
+YT_DLP_LOGGER = YTDLPLogger()
 SP_PLAYLIST_SONG_METADATA = {
     "market": "US",
     "fields": "items(track(name,duration_ms,artists(name),external_urls(spotify),album(images(url)))),next,total",  # noqa: E501
@@ -48,18 +49,22 @@ YOUTUBE_INFO_PARAMS: _Params = {
     "js_runtimes": {"node": {}},
     "quiet": True,
     "extractor_args": {"youtube": {"skip": ["hls", "dash", "translated_subs"]}},
+    "logger": YT_DLP_LOGGER,
 }
 SEARCH_PARAMS: _Params = {
     "allowed_extractors": ["youtube:search", "end"],
     "quiet": True,
+    "logger": YT_DLP_LOGGER,
 }
 SOUNDCLOUD_INFO_PARAMS: _Params = {
     "allowed_extractors": ["soundcloud", "end"],
     "quiet": True,
+    "logger": YT_DLP_LOGGER,
 }
 SPOTIFY_SEARCH_PARAMS: _Params = {
     "allowed_extractors": ["youtube:music:search_url", "end"],
     "quiet": True,
+    "logger": YT_DLP_LOGGER,
 }
 YOUTUBE_AUDIO_PARAMS: _Params = {
     "allowed_extractors": ["youtube", "end"],
@@ -67,12 +72,14 @@ YOUTUBE_AUDIO_PARAMS: _Params = {
     "js_runtimes": {"node": {}},
     "noplaylist": True,
     "quiet": True,
+    "logger": YT_DLP_LOGGER,
 }
 SOUNDCLOUD_AUDIO_PARAMS: _Params = {
     "allowed_extractors": ["soundcloud", "end"],
     "format": "bestaudio/best",
     "noplaylist": True,
     "quiet": True,
+    "logger": YT_DLP_LOGGER,
 }
 
 
@@ -718,7 +725,8 @@ def _get_spotify_source_impl(query: Song) -> str | None:
             return None
         songs = [
             Song.from_yt_dlp(entry)
-            for entry in islice(filter(None, entries), 3)
+            # Testing 2 for now instead of 3 to see if it improves results
+            for entry in islice(filter(None, entries), 2)
         ]
         if not songs:
             logger.warning(
