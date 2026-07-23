@@ -15,26 +15,60 @@ class SongCache:
         async with self._lock:
             cached_song = self.cache.get(cache_key)
             if cached_song and cached_song.expiry < time.time():
-                logger.debug("Song cache returned expired song, deleting key")
+                logger.debug(
+                    "Song cache entry expired; deleting it",
+                    extra={
+                        "event": "song_cache_entry_expired",
+                        "cache_key": cache_key,
+                    },
+                )
                 del self.cache[cache_key]
                 return None
             if cached_song:
-                logger.debug("Song cache get returned %s", cache_key)
+                logger.debug(
+                    "Song cache hit for %s",
+                    cache_key,
+                    extra={
+                        "event": "song_cache_hit",
+                        "cache_key": cache_key,
+                    },
+                )
                 return cached_song.source
             else:
-                logger.debug("Song cache get returned none for %s", cache_key)
+                logger.debug(
+                    "Song cache miss for %s",
+                    cache_key,
+                    extra={
+                        "event": "song_cache_miss",
+                        "cache_key": cache_key,
+                    },
+                )
                 return None
 
     async def add_key(self, cached_song: str, source: CachedSong) -> None:
         async with self._lock:
-            logger.debug("Added %s to song cache", cached_song)
+            logger.debug(
+                "Added %s to song cache",
+                cached_song,
+                extra={
+                    "event": "song_cache_entry_added",
+                    "cache_key": cached_song,
+                },
+            )
             self.cache[cached_song] = source
 
     async def delete_key(self, cache_key: str) -> None:
         async with self._lock:
             key = self.cache.pop(cache_key, None)
             if not key:
-                logger.debug("Failed to remove %s", cache_key)
+                logger.debug(
+                    "Song cache entry was not present for deletion: %s",
+                    cache_key,
+                    extra={
+                        "event": "song_cache_delete_miss",
+                        "cache_key": cache_key,
+                    },
+                )
 
     async def get_size(self) -> int:
         async with self._lock:
@@ -65,6 +99,12 @@ class CachedSong:
         try:
             expiry = int(expiry_values[0])
         except ValueError:
-            logger.debug("Expiry returned non int value")
+            logger.debug(
+                "Song cache expiry was not an integer",
+                extra={
+                    "event": "song_cache_expiry_invalid",
+                    "cache_expiry_value": expiry_values[0],
+                },
+            )
             return _DEFAULT_CACHE_LIFETIME_SECONDS
         return expiry - _CACHE_BUFFER

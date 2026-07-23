@@ -41,31 +41,62 @@ class Bot(commands.Bot):
         )
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
-        logger.info("Joined: %s", guild.name)
+        logger.info(
+            "Bot joined guild %s",
+            guild.name,
+            extra={
+                "event": "bot_guild_joined",
+                "guild_id": guild.id,
+            },
+        )
         try:
             await self.tree.sync(guild=guild)
             logger.info(
-                "Synced guild-scoped commands to: %s[%d]", guild.name, guild.id
+                "Synced guild-scoped commands to %s",
+                guild.name,
+                extra={
+                    "event": "guild_commands_synced",
+                    "guild_id": guild.id,
+                },
             )
         except discord.Forbidden:
             logger.error(
-                "No permission to sync in guild %s, (%d)", guild.name, guild.id
+                "Missing permission to sync commands in guild %s",
+                guild.name,
+                extra={
+                    "event": "guild_command_sync_permission_denied",
+                    "guild_id": guild.id,
+                },
             )
         except discord.HTTPException as e:
             logger.error(
-                "HTTP sync failure guild: %s, (%d) [status=%s code=%s]",
+                "HTTP command sync failed in guild %s [status=%s code=%s]",
                 guild.name,
-                guild.id,
                 e.status,
                 e.code,
+                extra={
+                    "event": "guild_command_sync_http_failed",
+                    "guild_id": guild.id,
+                    "exception": str(e),
+                },
             )
         except discord.DiscordException:
-            logger.error(
-                "Discord sync error guild: %s, (%d)", guild.name, guild.id
+            logger.exception(
+                "Discord command sync failed in guild %s",
+                guild.name,
+                extra={
+                    "event": "guild_command_sync_failed",
+                    "guild_id": guild.id,
+                },
             )
         except Exception:
-            logger.error(
-                "Unexpected sync error guild: %s, (%d)", guild.name, guild.id
+            logger.exception(
+                "Unexpected command sync failure in guild %s",
+                guild.name,
+                extra={
+                    "event": "guild_command_sync_unexpected_failure",
+                    "guild_id": guild.id,
+                },
             )
 
     @override
@@ -73,14 +104,19 @@ class Bot(commands.Bot):
         if self.debugger_on:
             if not USER_ID or not GUILD_ID:
                 logger.warning(
-                    "Enabled debugger without user_id or guild_id will not load debugging commands"  # noqa: E501
+                    "Debug commands require USER_ID and GUILD_ID",
+                    extra={"event": "debug_command_configuration_missing"},
                 )
             else:
                 await self.load_extension("hatsune_miku_bot.cogs.debug")
         await self.load_extension("hatsune_miku_bot.cogs.utility")
         await self.add_cog(MikuMusicCommands(self, self.db_logic))
         for ext in self.extensions:
-            logger.info("Loaded %s", ext)
+            logger.info(
+                "Loaded extension %s",
+                ext,
+                extra={"event": "bot_extension_loaded"},
+            )
 
         @self.tree.error
         async def handle_app_command_error(
@@ -98,18 +134,41 @@ class Bot(commands.Bot):
         if self.user:
             for g in self.guilds:
                 logger.info(
-                    "Logged in as %s on %s[%d]", self.user, g.name, g.id
+                    "Logged in as %s on guild %s",
+                    self.user,
+                    g.name,
+                    extra={
+                        "event": "bot_guild_session_ready",
+                        "guild_id": g.id,
+                    },
                 )
         if not self.synced:
             for g in self.guilds:
                 await self.tree.sync(guild=g)
-                logger.info("Synced guild command set for %s[%d]", g.name, g.id)
+                logger.info(
+                    "Synced guild command set for %s",
+                    g.name,
+                    extra={
+                        "event": "guild_commands_synced",
+                        "guild_id": g.id,
+                    },
+                )
             self.synced = True
-        logger.info("Ready to go!😼")
+        logger.info("Bot is ready", extra={"event": "bot_ready"})
         return None
 
     async def on_disconnect(self) -> None:
-        logger.info("Bot has disconnected")
+        logger.info(
+            "Bot disconnected from Discord",
+            extra={"event": "bot_disconnected"},
+        )
+        return None
+
+    async def on_resumed(self) -> None:
+        logger.info(
+            "Bot reconnected to Discord",
+            extra={"event": "bot_reconnected"},
+        )
         return None
 
     async def on_app_command_error(
@@ -122,7 +181,21 @@ class Bot(commands.Bot):
                 ephemeral=True,
             )
         else:
-            logger.error("%s", error)
+            original_error = getattr(error, "original", error)
+            logger.error(
+                "Application command failed: %s",
+                original_error,
+                exc_info=(
+                    type(original_error),
+                    original_error,
+                    original_error.__traceback__,
+                ),
+                extra={
+                    "event": "application_command_failed",
+                    "guild_id": getattr(interaction, "guild_id", None),
+                    "exception": str(original_error),
+                },
+            )
             await reply(
                 interaction, embed=text_only_embed("Error has occured!")
             )

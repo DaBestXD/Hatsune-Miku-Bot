@@ -63,28 +63,48 @@ class GuildStateController:
 
     async def run(self) -> None:
         if self.task and not self.task.done():
-            logger.debug("Main queue loop already running")
+            logger.debug(
+                "Guild event loop is already running",
+                extra={
+                    "event": "guild_event_loop_already_running",
+                    "guild_id": self.id,
+                },
+            )
             return None
         self.task = asyncio.create_task(
             self.main_loop(),
             name=f"Main queue loop for {self.id}  created",
         )
-        logger.debug("Main queue loop for %d created", self.id)
+        logger.debug(
+            "Guild event loop started",
+            extra={
+                "event": "guild_event_loop_started",
+                "guild_id": self.id,
+            },
+        )
 
     async def main_loop(self) -> None:
         while True:
             event = await self.queue.get()
             try:
                 if isinstance(event, StopEvent):
-                    logger.debug("Stop event recieved, breaking loop")
+                    logger.debug(
+                        "Guild event loop received stop event",
+                        extra={
+                            "event": "guild_event_loop_stopping",
+                            "guild_id": self.id,
+                        },
+                    )
                     break
                 await event.func_to_execute()
-            except Exception as e:
+            except Exception:
                 logger.exception(
-                    "Failed handling %s for guild %s, %s",
+                    "Guild event loop failed to process %s",
                     type(event).__name__,
-                    self.id,
-                    e,
+                    extra={
+                        "event": "guild_event_processing_failed",
+                        "guild_id": self.id,
+                    },
                 )
             finally:
                 self.queue.task_done()
@@ -93,10 +113,24 @@ class GuildStateController:
         source = await get_audio_source(song)
         if not source:
             logger.warning(
-                "Failed to cache audio for %s[%s]", song.title, song.webpage_url
+                "Failed to cache audio for %s[%s]",
+                song.title,
+                song.webpage_url,
+                extra={
+                    "event": "song_cache_failed",
+                    "guild_id": self.id,
+                },
             )
             return None
-        logger.debug("Caching %s[%s]", song.title, song.webpage_url)
+        logger.debug(
+            "Caching audio for %s[%s]",
+            song.title,
+            song.webpage_url,
+            extra={
+                "event": "song_cache_started",
+                "guild_id": self.id,
+            },
+        )
         await self.song_cache.add_key(song.webpage_url, CachedSong(source))
 
     async def begin_song_cache(self) -> None:
@@ -136,10 +170,21 @@ class GuildStateController:
 
     async def _missing_source_helper(self) -> None:
         if not self.state.active_song:
-            logger.warning("No source found while active song was none")
+            logger.warning(
+                "No audio source was found without an active song",
+                extra={
+                    "event": "playback_source_missing",
+                    "guild_id": self.id,
+                },
+            )
         else:
             logger.warning(
-                "No source found for %s", self.state.active_song.title
+                "No audio source was found for %s",
+                self.state.active_song.title,
+                extra={
+                    "event": "playback_source_missing",
+                    "guild_id": self.id,
+                },
             )
         if self.state.text_channel:
             await self.state.text_channel.send(
@@ -157,8 +202,11 @@ class GuildStateController:
             )
         else:
             logger.debug(
-                "No text channel was set for erorr branch in %s",
-                self.begin_playback.__name__,
+                "No text channel was available for the playback error",
+                extra={
+                    "event": "playback_error_text_channel_missing",
+                    "guild_id": self.id,
+                },
             )
         return None
 
@@ -167,13 +215,27 @@ class GuildStateController:
         self, playback_type: _PlaybackType = _PlaybackType.NEW_SONG
     ) -> None:
         if not self.state.vc:
-            logger.warning("Attempted to play song while not in vc")
+            logger.warning(
+                "Playback requested without a voice client",
+                extra={
+                    "event": "playback_voice_client_missing",
+                    "guild_id": self.id,
+                    "playback_type": playback_type.name,
+                },
+            )
             return None
         self.state.active_song = (
             self.state.songs[0] if self.state.songs else None
         )
         if not self.state.active_song:
-            logger.warning("Attempted to play song with no active song set")
+            logger.warning(
+                "Playback requested without an active song",
+                extra={
+                    "event": "playback_active_song_missing",
+                    "guild_id": self.id,
+                    "playback_type": playback_type.name,
+                },
+            )
             return None
         if self.state.vc.is_playing():
             # Debug message here too noisy, will fire on skip/queue events, etc.
@@ -182,7 +244,14 @@ class GuildStateController:
         source = await self.song_cache.get(self.state.active_song.webpage_url)
         if not source:
             # Cache check branch
-            logger.debug("Cache miss, fetching source using ydl")
+            logger.debug(
+                "Audio cache miss; resolving source",
+                extra={
+                    "event": "song_cache_miss",
+                    "guild_id": self.id,
+                    "playback_type": playback_type.name,
+                },
+            )
             source = await get_audio_source(self.state.active_song)
             if source:
                 await self.song_cache.add_key(
@@ -223,11 +292,22 @@ class GuildStateController:
                 )
             else:
                 logger.warning(
-                    "No text channel was set for %s",
-                    self.begin_playback.__name__,
+                    "No text channel was set for playback",
+                    extra={
+                        "event": "playback_text_channel_missing",
+                        "guild_id": self.id,
+                        "playback_type": playback_type.name,
+                    },
                 )
         if playback_type is _PlaybackType.STALE_RESTART:
-            logger.debug("Recovered from stale cache hit")
+            logger.debug(
+                "Recovered playback from a stale cached source",
+                extra={
+                    "event": "playback_stale_source_recovered",
+                    "guild_id": self.id,
+                    "playback_type": playback_type.name,
+                },
+            )
 
     def after_callback(
         self,
@@ -236,7 +316,17 @@ class GuildStateController:
         playback_type: _PlaybackType,
     ) -> None:
         if error:
-            logger.error("%s", error)
+            logger.error(
+                "Voice playback callback reported an error: %s",
+                error,
+                exc_info=(type(error), error, error.__traceback__),
+                extra={
+                    "event": "playback_callback_failed",
+                    "guild_id": self.id,
+                    "playback_type": playback_type.name,
+                    "exception": str(error),
+                },
+            )
         ffmpeg_error = stderr_buff.getvalue().decode("utf-8", errors="ignore")
         asyncio.run_coroutine_threadsafe(
             self.add_event(self.finished_playback, ffmpeg_error, playback_type),
@@ -250,7 +340,15 @@ class GuildStateController:
         playback_type: _PlaybackType = _PlaybackType.NEW_SONG,
     ) -> None:
         if ffmpeg_error:
-            logger.debug("%s", ffmpeg_error)
+            logger.debug(
+                "FFmpeg playback diagnostics: %s",
+                ffmpeg_error,
+                extra={
+                    "event": "ffmpeg_playback_diagnostics",
+                    "guild_id": self.id,
+                    "playback_type": playback_type.name,
+                },
+            )
         if "403 Forbidden" in ffmpeg_error:
             await self.recover_stale_audio_source(playback_type)
             return None
@@ -267,7 +365,14 @@ class GuildStateController:
                 self.state.songs.append(self.state.active_song)
                 self.state.songs.pop(0)
             else:
-                logger.warning("Doing song loop all no active song was found")
+                logger.warning(
+                    "Queue looping expected an active song",
+                    extra={
+                        "event": "playback_loop_active_song_missing",
+                        "guild_id": self.id,
+                        "playback_type": playback_type.name,
+                    },
+                )
         elif not self.state.song_mods.song_loop and self.state.songs:
             self.state.songs.pop(0)
         self.state.active_song = (
@@ -276,8 +381,12 @@ class GuildStateController:
         if not self.state.active_song:
             if not self.state.text_channel:
                 logger.warning(
-                    "Text channel was none for %s",
-                    self.finished_playback.__name__,
+                    "No text channel was available after playback finished",
+                    extra={
+                        "event": "playback_text_channel_missing",
+                        "guild_id": self.id,
+                        "playback_type": playback_type.name,
+                    },
                 )
                 return None
             await self.state.text_channel.send(
@@ -293,7 +402,14 @@ class GuildStateController:
     ) -> None:
         active_song = self.state.active_song
         if not active_song:
-            logger.warning("403 error while no active song set")
+            logger.warning(
+                "Stale source recovery requested without an active song",
+                extra={
+                    "event": "playback_stale_source_active_song_missing",
+                    "guild_id": self.id,
+                    "playback_type": failed_playback_type.name,
+                },
+            )
             return None
         preserve_modifier_position = (
             failed_playback_type is _PlaybackType.MODIFIED_RESTART
@@ -327,7 +443,13 @@ class GuildStateController:
         if self.state.vc:
             self.state.vc.stop()
         else:
-            logger.warning("Skip was called while not in vc")
+            logger.warning(
+                "Skip requested without a voice client",
+                extra={
+                    "event": "playback_skip_voice_client_missing",
+                    "guild_id": self.id,
+                },
+            )
         await self.add_event(self.begin_song_cache)
         return None
 
@@ -416,7 +538,13 @@ class GuildStateController:
         if self.state.song_mods.modifier_restart_pending:
             return None
         if not self.state.vc or not self.state.active_song:
-            logger.warning("Attempted to modify song without an active song")
+            logger.warning(
+                "Playback modifier requested without an active song",
+                extra={
+                    "event": "playback_modifier_active_song_missing",
+                    "guild_id": self.id,
+                },
+            )
             return None
         self.state.song_mods.position_offset_s = (
             self.state.song_mods.interrupt_time()
@@ -504,7 +632,10 @@ class SongMods:
 
     def interrupt_time(self) -> float:
         if self.start_timestamp is None:
-            logger.warning("Start timestamp was not found")
+            logger.warning(
+                "Playback modifier position requested without start timestamp",
+                extra={"event": "playback_start_timestamp_missing"},
+            )
             return self.position_offset_s
 
         elapsed = time.monotonic() - self.start_timestamp

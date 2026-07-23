@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import time
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Self
@@ -54,7 +55,11 @@ class Song:
             song_name = json_reponse["name"]
             spotify_url = json_reponse["external_urls"]["spotify"]
             artist = json_reponse["artists"][0]["name"]
-            album_thumbnail = json_reponse["album"]["images"][0]["url"]
+            _thumbnails = json_reponse["album"]["images"]
+            if not _thumbnails:
+                album_thumbnail = ""
+            else:
+                album_thumbnail = json_reponse["album"]["images"][0]["url"]
             duration = json_reponse["duration_ms"] // 1000
         title = song_name + " - " + artist
         return cls(title, spotify_url, album_thumbnail, duration, "0")
@@ -208,7 +213,8 @@ class Playlist:
         for item in json_songs_response["items"]:
             song_json = item if is_album else item.get("track")
             if song_json:
-                songs.append(Song.from_spotify(song_json, album_thumbnail))
+                with contextlib.suppress(KeyError, ValueError):
+                    songs.append(Song.from_spotify(song_json, album_thumbnail))
         return cls(songs, playlist_name, spotify_link, thumbnail_url)
 
     @classmethod

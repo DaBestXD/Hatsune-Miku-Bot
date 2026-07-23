@@ -1,18 +1,22 @@
 from __future__ import annotations
 
+import io
+import json
+import logging
 import os
 import runpy
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
-from unittest.mock import AsyncMock, Mock, call, create_autospec, patch
+from typing import Any, override
+from unittest.mock import AsyncMock, call, patch
 
 from discord.app_commands import AppCommandError, CheckFailure
 
 import hatsune_miku_bot.bot_config.client as client_module
-import hatsune_miku_bot.bot_config.logging_config as logging_config
 import hatsune_miku_bot.bot_config.paths as paths
-from tests.helpers import module_proxy
+import hatsune_miku_bot.logging.logging_setup as logging_setup
 
 
 def as_any(value: object) -> Any:
@@ -51,54 +55,65 @@ class ConstantsAndPathsTests(unittest.TestCase):
 
 
 class LoggingConfigTests(unittest.TestCase):
-    def test_logger_config_builds_file_and_console_handlers(self) -> None:
-        file_handler = Mock(spec_set=logging_config.logging.Handler)
-        stream_handler = Mock(spec_set=logging_config.logging.Handler)
+    @override
+    def tearDown(self) -> None:
+        logging.shutdown()
+        logging.getLogger().handlers.clear()
 
-        # Directory creation is tested separately from handler wiring to avoid
-        # touching the real logs directory.
-        fake_log_dir = Mock()
-        fake_log_path = Mock()
-        fake_log_dir.__truediv__ = Mock(return_value=fake_log_path)
-        fake_root = Mock()
-        fake_root.__truediv__ = Mock(return_value=fake_log_dir)
-        stream_handler_class = create_autospec(
-            logging_config.logging.StreamHandler,
-            return_value=stream_handler,
-        )
-        basic_config = create_autospec(logging_config.logging.basicConfig)
-        get_logger = create_autospec(
-            logging_config.logging.getLogger,
-            return_value=Mock(spec_set=logging_config.logging.Logger),
-        )
-        logging_proxy = module_proxy(
-            logging_config.logging,
-            StreamHandler=stream_handler_class,
-            basicConfig=basic_config,
-            getLogger=get_logger,
-        )
+    def test_color_logging_writes_colored_console_and_plain_file(self) -> None:
+        console = io.StringIO()
         with (
-            patch.object(logging_config, "PROJECT_ROOT", fake_root),
-            patch.object(logging_config, "logging", logging_proxy),
-            patch.object(
-                logging_config,
-                "RotatingFileHandler",
-                autospec=True,
-                return_value=file_handler,
-            ) as rotating_file_handler,
+            tempfile.TemporaryDirectory() as directory,
+            patch.dict(
+                os.environ,
+                {"APP_ENVIRONMENT": "DEV", "LOG_FORMAT": "color"},
+            ),
+            patch.object(logging_setup, "PROJECT_ROOT", Path(directory)),
+            patch("sys.stdout", console),
         ):
-            logging_config.logger_config()
+            listener = logging_setup.setup_logging()
+            with listener:
+                logging.getLogger("tests.logging").warning(
+                    "Color logging test",
+                    extra={"event": "color_logging_test"},
+                )
 
-        fake_log_dir.mkdir.assert_called_once_with(parents=True, exist_ok=True)
-        rotating_file_handler.assert_called_once_with(
-            fake_log_path,
-            maxBytes=10_000_000,
-            backupCount=5,
-            encoding="utf-8",
-        )
-        file_handler.setFormatter.assert_called_once()
-        stream_handler.setFormatter.assert_called_once()
-        basic_config.assert_called_once()
+            file_output = (Path(directory) / "logs" / "bot.log").read_text()
+
+        self.assertIn("\033[33mWARNING\033[0m", console.getvalue())
+        self.assertIn("Color logging test", file_output)
+        self.assertNotIn("\033[", file_output)
+
+    def test_json_logging_writes_structured_console_and_file(self) -> None:
+        console = io.StringIO()
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.dict(
+                os.environ,
+                {"APP_ENVIRONMENT": "PROD", "LOG_FORMAT": "json"},
+            ),
+            patch.object(logging_setup, "PROJECT_ROOT", Path(directory)),
+            patch("sys.stdout", console),
+        ):
+            listener = logging_setup.setup_logging()
+            with listener:
+                logging.getLogger("tests.logging").warning(
+                    "JSON logging test",
+                    extra={
+                        "event": "json_logging_test",
+                        "guild_id": 42,
+                    },
+                )
+
+            file_output = (Path(directory) / "logs" / "bot.log").read_text()
+
+        console_record = json.loads(console.getvalue())
+        file_record = json.loads(file_output)
+        for record in (console_record, file_record):
+            self.assertEqual(record["environment"], "PROD")
+            self.assertEqual(record["message"], "JSON logging test")
+            self.assertEqual(record["event"], "json_logging_test")
+            self.assertEqual(record["guild_id"], 42)
 
 
 class BotClientTests(unittest.IsolatedAsyncioTestCase):
@@ -176,4 +191,20 @@ class BotClientTests(unittest.IsolatedAsyncioTestCase):
             error = AppCommandError("boom")
             await bot.on_app_command_error(interaction, error)
         self.assertEqual(reply_mock.await_count, 2)
+        await bot.close()
+
+    async def test_connection_lifecycle_events_are_logged(self) -> None:
+        bot = client_module.Bot(owner_id=39, db_logic=as_any(AsyncMock()))
+
+        with self.assertLogs(client_module.logger, level="INFO") as logs:
+            await bot.on_disconnect()
+            await bot.on_resumed()
+
+        self.assertEqual(
+            [record.getMessage() for record in logs.records],
+            [
+                "Bot disconnected from Discord",
+                "Bot reconnected to Discord",
+            ],
+        )
         await bot.close()

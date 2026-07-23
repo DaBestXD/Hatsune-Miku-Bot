@@ -52,11 +52,17 @@ class MikuMusicCommands(commands.Cog):
         Cog loading and unloading would only be caused by debugging commands
         """
         if not self.audio_session:
-            logger.debug("Creating Audio session")
+            logger.debug(
+                "Creating audio HTTP session",
+                extra={"event": "audio_http_session_creation_started"},
+            )
             self.audio_session = ClientSession(timeout=ClientTimeout(total=10))
             self.audio_info_resolver = AudioInfoResolver(self.audio_session)
         else:
-            logger.debug("Audio session already created")
+            logger.debug(
+                "Audio HTTP session was already created",
+                extra={"event": "audio_http_session_already_created"},
+            )
 
     @override
     async def cog_unload(self) -> None:
@@ -69,21 +75,35 @@ class MikuMusicCommands(commands.Cog):
                 logger.exception(
                     "Failed to stop guild controller %d during cog unload",
                     controller.id,
+                    extra={
+                        "event": "guild_controller_stop_failed",
+                        "guild_id": controller.id,
+                    },
                 )
 
         if self.audio_session and not self.audio_session.closed:
-            logger.debug("Closing audio session")
+            logger.debug(
+                "Closing audio HTTP session",
+                extra={"event": "audio_http_session_closing"},
+            )
             await self.audio_session.close()
             self.audio_info_resolver = None
         else:
-            logger.debug("Audio session was already closed")
+            logger.debug(
+                "Audio HTTP session was already closed",
+                extra={"event": "audio_http_session_already_closed"},
+            )
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild: Guild) -> None:
         logger.info(
-            "Removed %s[%d] from Guildstate Controller Dictionary",
+            "Removed guild controller for %s[%d]",
             guild.name,
             guild.id,
+            extra={
+                "event": "guild_controller_removed",
+                "guild_id": guild.id,
+            },
         )
         con = self.guildstate_con_dict.pop(guild.id, None)
         if con:
@@ -93,9 +113,13 @@ class MikuMusicCommands(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_join(self, guild: Guild) -> None:
         logger.info(
-            "Added %s[%d] to Guildstate Controller Dictionary",
+            "Added guild controller for %s[%d]",
             guild.name,
             guild.id,
+            extra={
+                "event": "guild_controller_added",
+                "guild_id": guild.id,
+            },
         )
         self.guildstate_con_dict[guild.id] = GuildStateController(
             self.bot, guild.id, self.db_logic
@@ -111,10 +135,21 @@ class MikuMusicCommands(commands.Cog):
                     self.bot, g.id, self.db_logic
                 )
                 await self.guildstate_con_dict[g.id].run()
-                logger.info("Added %s[%d] to GuildPlaybackState", g.name, g.id)
+                logger.info(
+                    "Initialized guild playback state for %s[%d]",
+                    g.name,
+                    g.id,
+                    extra={
+                        "event": "guild_playback_state_initialized",
+                        "guild_id": g.id,
+                    },
+                )
             self.synced = True
         else:
-            logger.debug("GuildPlaybackState dict already initialized")
+            logger.debug(
+                "Guild playback state was already initialized",
+                extra={"event": "guild_playback_state_already_initialized"},
+            )
         return None
 
     @commands.Cog.listener()
@@ -128,6 +163,10 @@ class MikuMusicCommands(commands.Cog):
             logger.debug(
                 "Ignoring voice state update for guild %d without a controller",
                 member.guild.id,
+                extra={
+                    "event": "voice_state_update_controller_missing",
+                    "guild_id": member.guild.id,
+                },
             )
             return None
         if not before.channel and after.channel:
@@ -135,6 +174,11 @@ class MikuMusicCommands(commands.Cog):
                 "Bot has joined the voice channel: %s at [%s]",
                 after.channel,
                 member.guild.name,
+                extra={
+                    "event": "bot_voice_channel_joined",
+                    "guild_id": member.guild.id,
+                    "channel_id": getattr(after.channel, "id", None),
+                },
             )
             if isinstance(member.guild.voice_client, VoiceClient):
                 con.state.vc = member.guild.voice_client
@@ -144,6 +188,11 @@ class MikuMusicCommands(commands.Cog):
                 "Bot has left the voice channel: %s at [%s]",
                 before.channel,
                 member.guild.name,
+                extra={
+                    "event": "bot_voice_channel_left",
+                    "guild_id": member.guild.id,
+                    "channel_id": getattr(before.channel, "id", None),
+                },
             )
             con.state.vc = None
             return None
@@ -153,6 +202,20 @@ class MikuMusicCommands(commands.Cog):
                 before.channel,
                 after.channel,
                 member.guild.name,
+                extra={
+                    "event": "bot_voice_channel_moved",
+                    "guild_id": member.guild.id,
+                    "previous_channel_id": (
+                        getattr(before.channel, "id", None)
+                        if before.channel
+                        else None
+                    ),
+                    "channel_id": (
+                        getattr(after.channel, "id", None)
+                        if after.channel
+                        else None
+                    ),
+                },
             )
             if isinstance(member.guild.voice_client, VoiceClient):
                 con.state.vc = member.guild.voice_client
@@ -176,7 +239,13 @@ class MikuMusicCommands(commands.Cog):
             return None
         audio_resolver = self.audio_info_resolver
         if not audio_resolver:
-            logger.error("AudioInfoResolver was never created")
+            logger.error(
+                "Audio information resolver was never created",
+                extra={
+                    "event": "audio_info_resolver_missing",
+                    "guild_id": guild_id,
+                },
+            )
             return None
         result = await audio_resolver.get_song_info(query)
         if not result:

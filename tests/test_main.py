@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import os
 import sys
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import hatsune_miku_bot.__main__ as entrypoint
 
@@ -34,11 +36,47 @@ class ArgumentTests(unittest.TestCase):
             [
                 "hatsune-miku-bot",
                 "--debugger_enabled",
+                "--json_logging",
+                "--prod_enabled",
             ],
         ):
             result = entrypoint.args()
 
         self.assertTrue(result.debugger_enabled)
+        self.assertTrue(result.json_logging)
+        self.assertTrue(result.prod_enabled)
+
+
+class RunTests(unittest.TestCase):
+    def test_run_configures_logging_from_command_flags(self) -> None:
+        command_args = SimpleNamespace(
+            debugger_enabled=True,
+            json_logging=True,
+            prod_enabled=True,
+        )
+        listener = contextlib.nullcontext()
+
+        def close_coroutine(coroutine: object) -> None:
+            coroutine.close()  # type: ignore
+
+        run_async = Mock(side_effect=close_coroutine)
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(entrypoint, "args", return_value=command_args),
+            patch.object(
+                entrypoint,
+                "setup_logging",
+                return_value=listener,
+            ) as setup_logging,
+            patch.object(entrypoint.asyncio, "run", run_async),
+        ):
+            entrypoint.run()
+
+            self.assertEqual(os.environ["APP_ENVIRONMENT"], "PROD")
+            self.assertEqual(os.environ["LOG_FORMAT"], "json")
+
+        setup_logging.assert_called_once_with()
+        run_async.assert_called_once()
 
 
 class MainLifecycleTests(unittest.IsolatedAsyncioTestCase):
@@ -51,11 +89,8 @@ class MainLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
         bot = FakeBot(start)
         db = SimpleNamespace(close=AsyncMock())
-        command_args = SimpleNamespace(debugger_enabled=True)
 
         with (
-            patch.object(entrypoint, "args", return_value=command_args),
-            patch.object(entrypoint, "logger_config") as logger_config,
             patch.object(
                 entrypoint, "botsetup", return_value=(bot, "token")
             ) as botsetup,
@@ -65,9 +100,8 @@ class MainLifecycleTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=db),
             ) as db_init,
         ):
-            await entrypoint.main()
+            await entrypoint.main(debugger_enabled=True)
 
-        logger_config.assert_called_once_with()
         db_init.assert_awaited_once_with()
         botsetup.assert_called_once_with(db, True)
         bot.start.assert_awaited_once_with("token")
@@ -79,12 +113,6 @@ class MainLifecycleTests(unittest.IsolatedAsyncioTestCase):
         db = SimpleNamespace(close=AsyncMock())
 
         with (
-            patch.object(
-                entrypoint,
-                "args",
-                return_value=SimpleNamespace(debugger_enabled=False),
-            ),
-            patch.object(entrypoint, "logger_config"),
             patch.object(entrypoint, "botsetup", return_value=(bot, "token")),
             patch.object(
                 entrypoint.DBLogic,
@@ -93,7 +121,7 @@ class MainLifecycleTests(unittest.IsolatedAsyncioTestCase):
             ),
             self.assertRaisesRegex(RuntimeError, "startup failed"),
         ):
-            await entrypoint.main()
+            await entrypoint.main(debugger_enabled=False)
 
         bot.close.assert_awaited_once_with()
         db.close.assert_awaited_once_with()

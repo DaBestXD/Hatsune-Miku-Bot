@@ -109,12 +109,23 @@ class AudioInfoResolver:
 
     async def get_token(self, max_attempts: int = 3) -> None:
         if not self.client_id or not self.client_secret:
-            logger.warning("Attempted to play spotify song without credentials")
+            logger.warning(
+                "Spotify credentials were unavailable",
+                extra={
+                    "event": "spotify_credentials_missing",
+                    "audio_provider": "spotify",
+                },
+            )
             return None
         if self.token and time.time() < self.token_expiry:
             logger.debug(
                 "Token already cached, token expiry at %d",
                 int(self.token_expiry),
+                extra={
+                    "event": "spotify_token_cache_hit",
+                    "audio_provider": "spotify",
+                    "token_expiry": int(self.token_expiry),
+                },
             )
             return None
         if max_attempts <= 0:
@@ -138,8 +149,13 @@ class AudioInfoResolver:
                 if not isinstance(token_response, dict):
                     # This should never happened
                     logger.error(
-                        "Token reponse was of type %s not dict",
-                        type(token_response),
+                        "Spotify token response was %s instead of a dictionary",
+                        type(token_response).__name__,
+                        extra={
+                            "event": "spotify_token_response_invalid",
+                            "audio_provider": "spotify",
+                            "response_type": type(token_response).__name__,
+                        },
                     )
                 # No 'get' used here so fail fast, means json structure has
                 # changed and needs to be updated
@@ -147,26 +163,69 @@ class AudioInfoResolver:
                 self.token_expiry = time.time() + (
                     token_response["expires_in"] - random.randint(30, 120)
                 )
-                logger.debug("Spotify token has been set")
+                logger.debug(
+                    "Spotify token was refreshed",
+                    extra={
+                        "event": "spotify_token_refreshed",
+                        "audio_provider": "spotify",
+                        "token_expiry": int(self.token_expiry),
+                    },
+                )
 
         except aiohttp.ClientResponseError as e:
             if e.status >= 500:
-                logger.info("%s retrying...", e.status)
+                logger.info(
+                    "Spotify token request returned %s; retrying",
+                    e.status,
+                    extra={
+                        "event": "spotify_token_request_retrying",
+                        "audio_provider": "spotify",
+                        "status_code": e.status,
+                        "attempts_remaining": max_attempts - 1,
+                        "exception": str(e),
+                    },
+                )
                 # One second sleep time should be fine for now
                 await asyncio.sleep(1)
                 return await self.get_token(max_attempts - 1)
-            logger.error("%s: %s", e.status, e.message)
+            logger.error(
+                "Spotify token request failed with status %s: %s",
+                e.status,
+                e.message,
+                extra={
+                    "event": "spotify_token_request_failed",
+                    "audio_provider": "spotify",
+                    "status_code": e.status,
+                    "exception": str(e),
+                },
+            )
             return None
         except (aiohttp.ClientError, TimeoutError) as e:
             if max_attempts > 1:
                 logger.warning(
-                    "Spotify token request failed, retrying... (%d attempts left): %s",  # noqa: E501
+                    "Spotify token request failed; retrying with "
+                    "%d attempts left: %s",
                     max_attempts - 1,
                     e,
+                    extra={
+                        "event": "spotify_token_request_retrying",
+                        "audio_provider": "spotify",
+                        "attempts_remaining": max_attempts - 1,
+                        "exception": str(e),
+                    },
                 )
                 await asyncio.sleep(1)
                 return await self.get_token(max_attempts - 1)
-            logger.error("Spotify token request failed: %s", e)
+            logger.error(
+                "Spotify token request failed: %s",
+                e,
+                extra={
+                    "event": "spotify_token_request_failed",
+                    "audio_provider": "spotify",
+                    "attempts_remaining": 0,
+                    "exception": str(e),
+                },
+            )
             return None
 
     async def spotify_get_request(
@@ -178,7 +237,13 @@ class AudioInfoResolver:
             return None
         if max_attempts <= 0:
             logger.warning(
-                "Max attempts reached for %s", self.spotify_get_request.__name__
+                "Spotify request retry budget was exhausted",
+                extra={
+                    "event": "spotify_request_retry_budget_exhausted",
+                    "audio_provider": "spotify",
+                    "attempts_remaining": 0,
+                    "request_url": link,
+                },
             )
             return None
         headers = {"Authorization": f"Bearer {self.token}"}
@@ -190,27 +255,88 @@ class AudioInfoResolver:
                 return await res.json()
         except aiohttp.ClientResponseError as e:
             if max_attempts <= 1:
-                logger.warning("Spotify request retry budget exhausted")
+                logger.warning(
+                    "Spotify request retry budget was exhausted",
+                    extra={
+                        "event": "spotify_request_retry_budget_exhausted",
+                        "audio_provider": "spotify",
+                        "status_code": e.status,
+                        "attempts_remaining": 0,
+                        "request_url": link,
+                        "exception": str(e),
+                    },
+                )
                 return None
             if e.status < 500 and e.status not in (401, 429):
-                logger.warning("Unhandled status %d", e.status)
+                logger.warning(
+                    "Spotify request returned unhandled status %d",
+                    e.status,
+                    extra={
+                        "event": "spotify_request_status_unhandled",
+                        "audio_provider": "spotify",
+                        "status_code": e.status,
+                        "request_url": link,
+                        "exception": str(e),
+                    },
+                )
                 return None
             if e.status >= 500:
-                logger.debug("%s retrying...", e.status)
+                logger.debug(
+                    "Spotify request returned %s; retrying",
+                    e.status,
+                    extra={
+                        "event": "spotify_request_retrying",
+                        "audio_provider": "spotify",
+                        "status_code": e.status,
+                        "attempts_remaining": max_attempts - 1,
+                        "request_url": link,
+                        "exception": str(e),
+                    },
+                )
                 # One second sleep time should be fine for now
                 await asyncio.sleep(1)
             if e.status == 401:
-                logger.debug("Token reject during token requesting new token")
+                logger.debug(
+                    "Spotify rejected the cached token; requesting a new token",
+                    extra={
+                        "event": "spotify_token_rejected",
+                        "audio_provider": "spotify",
+                        "status_code": e.status,
+                        "request_url": link,
+                    },
+                )
                 self.token = None
                 self.token_expiry = -1
                 await self.get_token()
             if e.status == 429:
                 if e.headers and (delay := e.headers.get("Retry-After")):
                     delay = float(delay) + random.randint(5, 10)
-                    logger.debug("Delay provided %.2f", delay)
+                    logger.debug(
+                        "Spotify rate limit supplied a %.2f second retry delay",
+                        delay,
+                        extra={
+                            "event": "spotify_rate_limit_delay_received",
+                            "audio_provider": "spotify",
+                            "status_code": e.status,
+                            "attempts_remaining": max_attempts - 1,
+                            "retry_delay_seconds": delay,
+                            "request_url": link,
+                        },
+                    )
                 else:
-                    logger.debug("No delay was provided")
                     delay = 60
+                    logger.debug(
+                        "Spotify rate limit did not supply a retry delay; "
+                        "using default",
+                        extra={
+                            "event": "spotify_rate_limit_delay_defaulted",
+                            "audio_provider": "spotify",
+                            "status_code": e.status,
+                            "attempts_remaining": max_attempts - 1,
+                            "retry_delay_seconds": delay,
+                            "request_url": link,
+                        },
+                    )
                 await asyncio.sleep(delay)
             return await self.spotify_get_request(
                 link, params, max_attempts - 1
@@ -218,16 +344,35 @@ class AudioInfoResolver:
         except (aiohttp.ClientError, TimeoutError) as e:
             if max_attempts > 1:
                 logger.warning(
-                    "Spotify get request failed for %s, retrying... (%d attempts left): %s",  # noqa: E501
+                    "Spotify request failed for %s; retrying with "
+                    "%d attempts left: %s",
                     link,
                     max_attempts - 1,
                     e,
+                    extra={
+                        "event": "spotify_request_retrying",
+                        "audio_provider": "spotify",
+                        "attempts_remaining": max_attempts - 1,
+                        "request_url": link,
+                        "exception": str(e),
+                    },
                 )
                 await asyncio.sleep(1)
                 return await self.spotify_get_request(
                     link, params, max_attempts - 1
                 )
-            logger.error("Spotify get request failed for %s: %s", link, e)
+            logger.error(
+                "Spotify request failed for %s: %s",
+                link,
+                e,
+                extra={
+                    "event": "spotify_request_failed",
+                    "audio_provider": "spotify",
+                    "attempts_remaining": 0,
+                    "request_url": link,
+                    "exception": str(e),
+                },
+            )
             return None
 
     async def get_spotify_info(
@@ -245,7 +390,14 @@ class AudioInfoResolver:
             )
             if not container_metadata:
                 logger.warning(
-                    "Failed to get metadata response back for %s[Album]", id
+                    "Spotify album metadata was unavailable for %s",
+                    id,
+                    extra={
+                        "event": "spotify_metadata_missing",
+                        "audio_provider": "spotify",
+                        "resource_type": "album",
+                        "resource_id": id,
+                    },
                 )
                 return None
             song_information = await self.spotify_get_paginated_request(
@@ -254,7 +406,14 @@ class AudioInfoResolver:
             )
             if not song_information:
                 logger.warning(
-                    "Failed to get song information back for %s[Album]", id
+                    "Spotify album tracks were unavailable for %s",
+                    id,
+                    extra={
+                        "event": "spotify_tracks_missing",
+                        "audio_provider": "spotify",
+                        "resource_type": "album",
+                        "resource_id": id,
+                    },
                 )
                 return None
             playlist = Playlist.from_spotify(
@@ -274,7 +433,14 @@ class AudioInfoResolver:
             )
             if not container_metadata:
                 logger.warning(
-                    "Failed to get metadata response back for %s[Playlist]", id
+                    "Spotify playlist metadata was unavailable for %s",
+                    id,
+                    extra={
+                        "event": "spotify_metadata_missing",
+                        "audio_provider": "spotify",
+                        "resource_type": "playlist",
+                        "resource_id": id,
+                    },
                 )
                 return None
             song_information = await self.spotify_get_paginated_request(
@@ -283,7 +449,14 @@ class AudioInfoResolver:
             )
             if not song_information:
                 logger.warning(
-                    "Failed to get song information back for %s[Playlist]", id
+                    "Spotify playlist tracks were unavailable for %s",
+                    id,
+                    extra={
+                        "event": "spotify_tracks_missing",
+                        "audio_provider": "spotify",
+                        "resource_type": "playlist",
+                        "resource_id": id,
+                    },
                 )
                 return None
             playlist = Playlist.from_spotify(
@@ -302,15 +475,39 @@ class AudioInfoResolver:
                 params={"market": "US"},
             )
             if not song:
-                logger.warning("Failed to get response back for %s[Track]", id)
+                logger.warning(
+                    "Spotify track metadata was unavailable for %s",
+                    id,
+                    extra={
+                        "event": "spotify_metadata_missing",
+                        "audio_provider": "spotify",
+                        "resource_type": "track",
+                        "resource_id": id,
+                    },
+                )
                 return None
             return Song.from_spotify(song, "")
-        logger.warning("Regex failed for %s", path_type)
+        logger.warning(
+            "Spotify resource type could not be determined from %s",
+            path_type,
+            extra={
+                "event": "spotify_resource_type_unrecognized",
+                "audio_provider": "spotify",
+                "path_type": path_type,
+            },
+        )
         return None
 
     def get_soundcloud_info(self, url: str) -> Song | None:
         if re.match(r"(.*sets+.*)(?:\?)", url):
-            logger.info("Soundcloud playlist was entered")
+            logger.info(
+                "SoundCloud playlists are not supported",
+                extra={
+                    "event": "soundcloud_playlist_unsupported",
+                    "audio_provider": "soundcloud",
+                    "source_url": url,
+                },
+            )
             return None
         try:
             with YoutubeDL(params=SOUNDCLOUD_INFO_PARAMS) as ydl:
@@ -322,17 +519,37 @@ class AudioInfoResolver:
                         if "http_mp3" in key["format_id"]:
                             restricted = False
                     if restricted:
-                        logger.info("Unable to retrieve soundcloud http_mp3")
+                        logger.info(
+                            "SoundCloud HTTP MP3 format was unavailable",
+                            extra={
+                                "event": "soundcloud_audio_format_unavailable",
+                                "audio_provider": "soundcloud",
+                                "source_url": url,
+                            },
+                        )
                         return None
                     return Song.from_yt_dlp(result)
                 logger.error(
-                    "Regex failed for soundcloud info, Formats: %s Title: %s",
-                    formats,
+                    "SoundCloud response did not include audio formats for %s",
                     url,
+                    extra={
+                        "event": "soundcloud_formats_missing",
+                        "audio_provider": "soundcloud",
+                        "source_url": url,
+                    },
                 )
                 return None
         except DownloadError as e:
-            logger.error("Soundcloud download error: %s", e)
+            logger.error(
+                "SoundCloud metadata download failed: %s",
+                e,
+                extra={
+                    "event": "soundcloud_metadata_download_failed",
+                    "audio_provider": "soundcloud",
+                    "source_url": url,
+                    "exception": str(e),
+                },
+            )
             return None
 
     def search_query(self, query: str) -> Song | None:
@@ -349,7 +566,15 @@ class AudioInfoResolver:
                 if not entries:
                     # This differs from get_youtube_info as this function
                     # only handles search queries and not direct links
-                    logger.warning("Entries returned none for %s", query)
+                    logger.warning(
+                        "YouTube search returned no entries for %s",
+                        query,
+                        extra={
+                            "event": "youtube_search_entries_missing",
+                            "audio_provider": "youtube",
+                            "query": query,
+                        },
+                    )
                     return None
                 songs = [Song.from_yt_dlp(e) for e in entries if e]
                 # Filter out channel results
@@ -359,7 +584,16 @@ class AudioInfoResolver:
                 return Playlist(songs).greatest_view_count()
 
         except DownloadError as e:
-            logger.error("%s", e)
+            logger.error(
+                "YouTube search failed: %s",
+                e,
+                extra={
+                    "event": "youtube_search_failed",
+                    "audio_provider": "youtube",
+                    "query": query,
+                    "exception": str(e),
+                },
+            )
             return None
 
     def get_youtube_info(self, url: str) -> Playlist | Song | None:
@@ -375,17 +609,42 @@ class AudioInfoResolver:
                     return Song.from_yt_dlp_direct_link(result)
                 entries = result.get("entries")
                 if isinstance(entries, PagedList):
-                    logger.debug("YDL returned page list for %s", url)
+                    logger.debug(
+                        "YouTube returned a paged playlist for %s",
+                        url,
+                        extra={
+                            "event": "youtube_paged_playlist_unsupported",
+                            "audio_provider": "youtube",
+                            "source_url": url,
+                        },
+                    )
                     return None
                 if entries is None:
-                    logger.debug("Entries returned none for %s", url)
+                    logger.debug(
+                        "YouTube returned no playlist entries for %s",
+                        url,
+                        extra={
+                            "event": "youtube_playlist_entries_missing",
+                            "audio_provider": "youtube",
+                            "source_url": url,
+                        },
+                    )
                     return None
                 playlist = Playlist.from_yt_dlp(result, entries)
                 if not playlist.songs:
                     return None
                 return playlist
         except DownloadError as e:
-            logger.error("%s", e)
+            logger.error(
+                "YouTube metadata download failed: %s",
+                e,
+                extra={
+                    "event": "youtube_metadata_download_failed",
+                    "audio_provider": "youtube",
+                    "source_url": url,
+                    "exception": str(e),
+                },
+            )
             return None
 
     async def get_song_info(self, url: str) -> Playlist | Song | None:
@@ -398,7 +657,14 @@ class AudioInfoResolver:
         url_domain = grouped_url.group(1)
         url_path = grouped_url.group(2)
         if url_domain == "on.soundcloud.com/":
-            logger.info("SoundCloud short links are not supported")
+            logger.info(
+                "SoundCloud short links are not supported",
+                extra={
+                    "event": "soundcloud_short_link_unsupported",
+                    "audio_provider": "soundcloud",
+                    "source_url": url,
+                },
+            )
             return None
         if "spotify" in url_domain:
             re_groups = re.match(
@@ -440,7 +706,15 @@ def _get_spotify_source_impl(query: Song) -> str | None:
         )
         entries = result.get("entries")
         if not entries or isinstance(entries, PagedList):
-            logger.debug("Entries returned none or PagedList")
+            logger.debug(
+                "YouTube Music search returned no usable entries",
+                extra={
+                    "event": "spotify_source_search_entries_unavailable",
+                    "audio_provider": "youtube_music",
+                    "song_title": query.title,
+                    "source_url": query.webpage_url,
+                },
+            )
             return None
         songs = [
             Song.from_yt_dlp(entry)
@@ -448,9 +722,15 @@ def _get_spotify_source_impl(query: Song) -> str | None:
         ]
         if not songs:
             logger.warning(
-                "No songs returned for %s[%s]",
+                "YouTube Music search returned no songs for %s[%s]",
                 query.title,
                 query.webpage_url,
+                extra={
+                    "event": "spotify_source_search_results_missing",
+                    "audio_provider": "youtube_music",
+                    "song_title": query.title,
+                    "source_url": query.webpage_url,
+                },
             )
             return None
         end_song = rank_spotify_search_results(songs, query)
@@ -459,6 +739,12 @@ def _get_spotify_source_impl(query: Song) -> str | None:
                 "Unable to find valid URL for %s, link: %s",
                 query.title,
                 query.webpage_url,
+                extra={
+                    "event": "spotify_source_url_missing",
+                    "audio_provider": "youtube_music",
+                    "song_title": query.title,
+                    "source_url": query.webpage_url,
+                },
             )
             return None
         with YoutubeDL(YOUTUBE_AUDIO_PARAMS) as ydl:
@@ -471,6 +757,13 @@ def _get_spotify_source_impl(query: Song) -> str | None:
                 query.webpage_url,
                 end_song.title,
                 end_song.webpage_url,
+                extra={
+                    "event": "spotify_audio_source_resolved",
+                    "audio_provider": "youtube_music",
+                    "song_title": query.title,
+                    "source_url": query.webpage_url,
+                    "resolved_title": end_song.title,
+                },
             )
             return resolved.get("url")
 
@@ -481,25 +774,57 @@ def _get_audio_source_impl(query: Song) -> str | None:
             return _get_spotify_source_impl(query)
         hostname = urlparse(query.webpage_url).hostname
         if not hostname:
-            logger.debug("Hostname was none for %s", query)
+            logger.debug(
+                "Audio source URL did not contain a hostname for %s",
+                query,
+                extra={
+                    "event": "audio_source_hostname_missing",
+                    "song_title": query.title,
+                    "source_url": query.webpage_url,
+                },
+            )
             return None
         if "soundcloud" in hostname:
             params = SOUNDCLOUD_AUDIO_PARAMS
+            audio_provider = "soundcloud"
         else:
             params = YOUTUBE_AUDIO_PARAMS
+            audio_provider = "youtube"
         with YoutubeDL(params) as ydl:
             result = ydl.extract_info(url=query.webpage_url, download=False)
             logger.info(
                 "Loaded audio for non-spotify link: %s, %s",
                 query.title,
                 query.webpage_url.replace("https://", ""),
+                extra={
+                    "event": "audio_source_resolved",
+                    "audio_provider": audio_provider,
+                    "song_title": query.title,
+                    "source_url": query.webpage_url,
+                },
             )
             return result.get("url")
     except DownloadError as e:
-        logger.error("Audio source download error: %s", e)
+        logger.error(
+            "Audio source download failed: %s",
+            e,
+            extra={
+                "event": "audio_source_download_failed",
+                "song_title": query.title,
+                "source_url": query.webpage_url,
+                "exception": str(e),
+            },
+        )
         return None
-    except Exception as e:
-        logger.critical("Audio failed in unexpected way: %s", e)
+    except Exception:
+        logger.exception(
+            "Audio source resolution failed unexpectedly",
+            extra={
+                "event": "audio_source_resolution_unexpected_failure",
+                "song_title": query.title,
+                "source_url": query.webpage_url,
+            },
+        )
         return None
 
 

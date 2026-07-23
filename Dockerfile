@@ -26,4 +26,6 @@ COPY src ./src
 RUN uv sync --frozen --no-dev \
   && mkdir -p /app/logs /app/data
 
-CMD ["hatsune-miku-bot"]
+# You can change the output of the logs to "color" if you pefer more
+# humanreadble logs
+CMD ["hatsune-miku-bot", "--prod_enabled", "--json_logging"]

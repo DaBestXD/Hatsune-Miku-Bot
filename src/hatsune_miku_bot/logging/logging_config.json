@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "formatters": {
+    "color": {
+      "()": "hatsune_miku_bot.logging.logging_setup.ColorFormatter",
+      "fmt": "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
+      "datefmt": "%Y-%m-%d %H:%M:%S"
+    },
+    "file": {
+      "format": "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
+      "datefmt": "%Y-%m-%d %H:%M:%S"
+    },
+    "json": {
+      "()": "hatsune_miku_bot.logging.logging_setup.JsonFormatter",
+      "service": "hatsune-miku-bot",
+      "environment": "development",
+      "fmt_keys": {
+        "timestamp": "timestamp",
+        "level": "levelname",
+        "service": "service",
+        "environment": "environment",
+        "logger": "name",
+        "message": "message",
+        "event": "event",
+        "guild_id": "guild_id",
+        "channel_id": "channel_id",
+        "previous_channel_id": "previous_channel_id",
+        "audio_provider": "audio_provider",
+        "playback_type": "playback_type",
+        "cache_key": "cache_key",
+        "cache_expiry_value": "cache_expiry_value",
+        "status_code": "status_code",
+        "attempts_remaining": "attempts_remaining",
+        "retry_delay_seconds": "retry_delay_seconds",
+        "token_expiry": "token_expiry",
+        "response_type": "response_type",
+        "resource_type": "resource_type",
+        "resource_id": "resource_id",
+        "request_url": "request_url",
+        "query": "query",
+        "song_title": "song_title",
+        "source_url": "source_url",
+        "resolved_title": "resolved_title",
+        "path_type": "path_type",
+        "exception": "exception"
+      }
+    }
+  },
+  "handlers": {
+    "stdout": {
+      "class": "logging.StreamHandler",
+      "level": "DEBUG",
+      "formatter": "color",
+      "stream": "ext://sys.stdout"
+    },
+    "file": {
+      "class": "logging.handlers.RotatingFileHandler",
+      "level": "DEBUG",
+      "formatter": "file",
+      "filename": "logs/bot.log",
+      "maxBytes": 10000000,
+      "backupCount": 5,
+      "encoding": "utf-8",
+      "delay": true
+    },
+    "mikuqueue": {
+      "class": "hatsune_miku_bot.logging.logging_setup.MikuQueueHandler",
+      "handlers": [
+        "stdout"
+      ],
+      "respect_handler_level": true
+    }
+  },
+  "root": {
+    "level": "DEBUG",
+    "handlers": [
+      "mikuqueue"
+    ]
+  },
+  "loggers": {
+    "discord": {
+      "level": "WARNING",
+      "propagate": true
+    },
+    "aiosqlite": {
+      "level": "WARNING",
+      "propagate": true
+    }
+  }
+}
