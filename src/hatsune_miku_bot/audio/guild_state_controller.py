@@ -5,7 +5,7 @@ import random
 import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal
 
 from discord import (
@@ -22,19 +22,43 @@ from hatsune_miku_bot.audio.playback_helpers import build_audio
 from hatsune_miku_bot.audio.song_cache import CachedSong, SongCache
 from hatsune_miku_bot.audio.song_playlist_classes import Playlist, Song
 from hatsune_miku_bot.db_logging.db_main import DBLogic
+from hatsune_miku_bot.monitoring.factory import DisabledMonitor, Monitor
 from hatsune_miku_bot.utils.discord_helpers import reply, text_only_embed
 
 logger = logging.getLogger(__name__)
 
 
-class _PlaybackType(Enum):
-    MODIFIED_RESTART = 0
-    STALE_RESTART = 1
-    NEW_SONG = 2
+class _PlaybackType(StrEnum):
+    MODIFIED_RESTART = "modified_restart"
+    STALE_RESTART = "stale_restart"
+    NEW_SONG = "new_song"
+
+
+class _PlaybackResult(StrEnum):
+    ACTIVE_SONG_MISSING = "active_song_missing"
+    CALLBACK_ERROR = "callback_error"
+    ENDED = "ended"
+    MODIFIER_RESTART_REQUESTED = "modifier_restart_requested"
+    SOURCE_MISSING = "source_missing"
+    STALE_SOURCE_DETECTED = "stale_source_detected"
+    START_ERROR = "start_error"
+    STARTED = "started"
+    VOICE_CLIENT_MISSING = "voice_client_missing"
+
+
+class _EventResult(StrEnum):
+    COMPLETED = "completed"
+    EXCEPTION = "exception"
 
 
 class GuildStateController:
-    def __init__(self, bot: commands.Bot, id: int, db_logic: DBLogic) -> None:
+    def __init__(
+        self,
+        bot: commands.Bot,
+        id: int,
+        db_logic: DBLogic,
+        monitor: Monitor | None = None,
+    ) -> None:
         self.id = id
         self.bot = bot
         self.queue: asyncio.Queue[Event | StopEvent] = asyncio.Queue()
@@ -42,6 +66,7 @@ class GuildStateController:
         self.song_cache = SongCache()
         self.task: asyncio.Task[None] | None = None
         self.db_logic = db_logic
+        self.monitor = monitor if monitor else DisabledMonitor()
 
     async def add_event[**P](
         self,
@@ -52,7 +77,12 @@ class GuildStateController:
         async def func_to_execute() -> None:
             await func(*args, **kwargs)
 
-        await self.queue.put(Event(func_to_execute))
+        await self.queue.put(
+            Event(
+                name=getattr(func, "__name__", type(func).__name__),
+                func_to_execute=func_to_execute,
+            )
+        )
 
     async def stop(self) -> None:
         if not self.task or self.task.done():
@@ -86,6 +116,8 @@ class GuildStateController:
     async def main_loop(self) -> None:
         while True:
             event = await self.queue.get()
+            started_at = time.perf_counter()
+            result = _EventResult.COMPLETED
             try:
                 if isinstance(event, StopEvent):
                     logger.debug(
@@ -98,15 +130,21 @@ class GuildStateController:
                     break
                 await event.func_to_execute()
             except Exception:
+                result = _EventResult.EXCEPTION
                 logger.exception(
                     "Guild event loop failed to process %s",
-                    type(event).__name__,
+                    event.name,
                     extra={
                         "event": "guild_event_processing_failed",
                         "guild_id": self.id,
                     },
                 )
             finally:
+                self.monitor.observe_event(
+                    event=event.name,
+                    result=result.value,
+                    duration=time.perf_counter() - started_at,
+                )
                 self.queue.task_done()
 
     async def cache_song(self, song: Song) -> None:
@@ -215,6 +253,10 @@ class GuildStateController:
         self, playback_type: _PlaybackType = _PlaybackType.NEW_SONG
     ) -> None:
         if not self.state.vc:
+            self.monitor.observe_playback(
+                playback_type,
+                _PlaybackResult.VOICE_CLIENT_MISSING,
+            )
             logger.warning(
                 "Playback requested without a voice client",
                 extra={
@@ -228,6 +270,10 @@ class GuildStateController:
             self.state.songs[0] if self.state.songs else None
         )
         if not self.state.active_song:
+            self.monitor.observe_playback(
+                playback_type,
+                _PlaybackResult.ACTIVE_SONG_MISSING,
+            )
             logger.warning(
                 "Playback requested without an active song",
                 extra={
@@ -258,6 +304,10 @@ class GuildStateController:
                     self.state.active_song.webpage_url, CachedSong(source)
                 )
         if not source:
+            self.monitor.observe_playback(
+                playback_type,
+                _PlaybackResult.SOURCE_MISSING,
+            )
             await self._missing_source_helper()
             return None
         stderr_buff = io.BytesIO()
@@ -271,12 +321,20 @@ class GuildStateController:
         )
         self.state.source = built_source
         self.state.song_mods.start_timestamp = time.monotonic()
-        self.state.vc.play(
-            built_source,
-            after=lambda error: self.after_callback(
-                error, stderr_buff, playback_type
-            ),
-        )
+        try:
+            self.state.vc.play(
+                built_source,
+                after=lambda error: self.after_callback(
+                    error, stderr_buff, playback_type
+                ),
+            )
+        except Exception:
+            self.monitor.observe_playback(
+                playback_type,
+                _PlaybackResult.START_ERROR,
+            )
+            raise
+        self.monitor.observe_playback(playback_type, _PlaybackResult.STARTED)
         if playback_type is _PlaybackType.MODIFIED_RESTART:
             self.state.song_mods.modifier_restart_pending = False
             return None
@@ -329,7 +387,12 @@ class GuildStateController:
             )
         ffmpeg_error = stderr_buff.getvalue().decode("utf-8", errors="ignore")
         asyncio.run_coroutine_threadsafe(
-            self.add_event(self.finished_playback, ffmpeg_error, playback_type),
+            self.add_event(
+                self.finished_playback,
+                ffmpeg_error,
+                playback_type,
+                error is not None,
+            ),
             self.bot.loop,
         )
         return None
@@ -338,6 +401,7 @@ class GuildStateController:
         self,
         ffmpeg_error: str,
         playback_type: _PlaybackType = _PlaybackType.NEW_SONG,
+        callback_failed: bool = False,
     ) -> None:
         if ffmpeg_error:
             logger.debug(
@@ -350,14 +414,30 @@ class GuildStateController:
                 },
             )
         if "403 Forbidden" in ffmpeg_error:
+            self.monitor.observe_playback(
+                playback_type,
+                _PlaybackResult.STALE_SOURCE_DETECTED,
+            )
             await self.recover_stale_audio_source(playback_type)
             return None
         if self.state.song_mods.modifier_restart_pending:
+            self.monitor.observe_playback(
+                playback_type,
+                _PlaybackResult.MODIFIER_RESTART_REQUESTED,
+            )
             await self.add_event(
                 self.begin_playback,
                 playback_type=_PlaybackType.MODIFIED_RESTART,
             )
             return None
+        self.monitor.observe_playback(
+            playback_type,
+            (
+                _PlaybackResult.CALLBACK_ERROR
+                if callback_failed
+                else _PlaybackResult.ENDED
+            ),
+        )
         self.state.song_mods.start_timestamp = None
         self.state.song_mods.position_offset_s = 0
         if self.state.song_mods.song_loop_all:
@@ -592,14 +672,18 @@ class StopEvent:
     Sentinel event to stop the event loop
     """
 
+    name: str = "StopEvent"
+
 
 @dataclass
 class Event:
     """
     Fields:
+        `name: Event name used for logs and monitoring`
         `func_to_execute: Callable[[], Coroutine[Any, Any, None]]`
     """
 
+    name: str
     func_to_execute: Callable[[], Coroutine[Any, Any, None]]
 
 

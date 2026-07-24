@@ -819,8 +819,11 @@ class YtDlpResolverTests(unittest.TestCase):
         self.assertEqual(result, "https://audio.test/stream")
         ydl_class.assert_called_once_with(resolver.SOUNDCLOUD_AUDIO_PARAMS)
 
-    def test_spotify_source_uses_search_then_youtube_audio_params(self) -> None:
+    def test_spotify_source_sanitizes_title_before_search(self) -> None:
         query = spotify_song()
+        query.title = (
+            "Chaos Stew -Darkness Inferno- Summoned ~Simmer My Soul~ - Camellia"
+        )
         search_ydl = MagicMock()
         search_ydl.extract_info.return_value = {
             "entries": [
@@ -850,4 +853,11 @@ class YtDlpResolverTests(unittest.TestCase):
                 call(resolver.SPOTIFY_SEARCH_PARAMS),
                 call(resolver.YOUTUBE_AUDIO_PARAMS),
             ],
+        )
+        search_ydl.extract_info.assert_called_once_with(
+            "https://music.youtube.com/search?"
+            "q=Chaos+Stew+-+Darkness+Inferno-+Summoned+"
+            "~Simmer+My+Soul~+-+Camellia#songs",
+            download=False,
+            process=False,
         )

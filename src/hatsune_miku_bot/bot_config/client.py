@@ -8,7 +8,7 @@ import discord
 from discord import Interaction
 from discord.app_commands import CheckFailure
 from discord.app_commands.errors import AppCommandError
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 from hatsune_miku_bot.bot_config.constants import (
     DISCORD_TOKEN,
@@ -17,6 +17,7 @@ from hatsune_miku_bot.bot_config.constants import (
 )
 from hatsune_miku_bot.cogs.music import MikuMusicCommands
 from hatsune_miku_bot.db_logging.db_main import DBLogic
+from hatsune_miku_bot.monitoring.factory import Monitor
 from hatsune_miku_bot.utils.discord_helpers import reply, text_only_embed
 
 logger = logging.getLogger(__name__)
@@ -24,8 +25,13 @@ logger = logging.getLogger(__name__)
 
 class Bot(commands.Bot):
     def __init__(
-        self, owner_id: int | None, db_logic: DBLogic, debugger_on: bool = False
+        self,
+        owner_id: int | None,
+        db_logic: DBLogic,
+        debugger_on: bool,
+        monitor: Monitor,
     ) -> None:
+        self.monitor = monitor
         self.synced: bool = False
         self.debugger_on = debugger_on
         self.process_start = datetime.now(UTC)
@@ -110,7 +116,7 @@ class Bot(commands.Bot):
             else:
                 await self.load_extension("hatsune_miku_bot.cogs.debug")
         await self.load_extension("hatsune_miku_bot.cogs.utility")
-        await self.add_cog(MikuMusicCommands(self, self.db_logic))
+        await self.add_cog(MikuMusicCommands(self, self.db_logic, self.monitor))
         for ext in self.extensions:
             logger.info(
                 "Loaded extension %s",
@@ -128,6 +134,7 @@ class Bot(commands.Bot):
             return None
 
         await self.tree.sync()
+        self.get_ping.start()
         return None
 
     async def on_ready(self) -> None:
@@ -154,10 +161,12 @@ class Bot(commands.Bot):
                     },
                 )
             self.synced = True
+        self.monitor.set_ready(True)
         logger.info("Bot is ready", extra={"event": "bot_ready"})
         return None
 
     async def on_disconnect(self) -> None:
+        self.monitor.set_ready(False)
         logger.info(
             "Bot disconnected from Discord",
             extra={"event": "bot_disconnected"},
@@ -165,6 +174,7 @@ class Bot(commands.Bot):
         return None
 
     async def on_resumed(self) -> None:
+        self.monitor.set_ready(True)
         logger.info(
             "Bot reconnected to Discord",
             extra={"event": "bot_reconnected"},
@@ -201,11 +211,33 @@ class Bot(commands.Bot):
             )
         return None
 
+    @override
+    async def close(self) -> None:
+        self.monitor.set_ready(False)
+        if self.get_ping.is_running():
+            self.get_ping.cancel()
+        await super().close()
 
-def botsetup(db_logic: DBLogic, debugger_on: bool = False) -> tuple[Bot, str]:
+    @tasks.loop(minutes=1)
+    async def get_ping(self) -> None:
+        self.monitor.set_bot_latency(self.latency)
+
+    @get_ping.before_loop
+    async def before_get_ping(self) -> None:
+        await self.wait_until_ready()
+
+
+def botsetup(
+    db_logic: DBLogic, debugger_on: bool, monitor: Monitor
+) -> tuple[Bot, str]:
     if not DISCORD_TOKEN:
         raise ValueError("Discord token cannot be none")
     return (
-        Bot(owner_id=USER_ID, db_logic=db_logic, debugger_on=debugger_on),
+        Bot(
+            owner_id=USER_ID,
+            db_logic=db_logic,
+            debugger_on=debugger_on,
+            monitor=monitor,
+        ),
         DISCORD_TOKEN,
     )

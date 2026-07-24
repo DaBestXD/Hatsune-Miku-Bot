@@ -704,8 +704,9 @@ def _get_spotify_source_impl(query: Song) -> str | None:
     with YoutubeDL(SPOTIFY_SEARCH_PARAMS) as ydl:
         pattern = re.compile(r"(?<!\S)(-|#|@)(?=\S)")
         p2 = re.compile(r"(?<=\S)\|(?=\S)")
-        safe_title = pattern.sub("- ", quote_plus(query.title))
+        safe_title = pattern.sub("- ", query.title)
         safe_title = p2.sub(" | ", safe_title)
+        safe_title = quote_plus(safe_title)
         result = ydl.extract_info(
             f"https://music.youtube.com/search?q={safe_title}#songs",
             download=False,

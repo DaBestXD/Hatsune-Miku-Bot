@@ -92,7 +92,12 @@ class MusicCogTests(unittest.IsolatedAsyncioTestCase):
         ) as controller_class:
             await cog.on_guild_join(guild)
 
-        controller_class.assert_called_once_with(bot, 42, db_logic)
+        controller_class.assert_called_once_with(
+            bot,
+            42,
+            db_logic,
+            cog.monitor,
+        )
         controller.run.assert_awaited_once_with()
         self.assertIs(cog.guildstate_con_dict[42], controller)
 
@@ -112,7 +117,10 @@ class MusicCogTests(unittest.IsolatedAsyncioTestCase):
         controllers: list[SimpleNamespace] = []
 
         def controller_factory(
-            _bot: object, guild_id: int, _db_logic: object
+            _bot: object,
+            guild_id: int,
+            _db_logic: object,
+            _monitor: object,
         ) -> SimpleNamespace:
             controller = SimpleNamespace(id=guild_id, run=AsyncMock())
             controllers.append(controller)

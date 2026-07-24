@@ -53,6 +53,7 @@ class RunTests(unittest.TestCase):
             debugger_enabled=True,
             json_logging=True,
             prod_enabled=True,
+            prometheus_enabled=False,
         )
         listener = contextlib.nullcontext()
 
@@ -89,8 +90,10 @@ class MainLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
         bot = FakeBot(start)
         db = SimpleNamespace(close=AsyncMock())
+        monitor = Mock()
 
         with (
+            patch.object(entrypoint, "init_monitor", return_value=monitor),
             patch.object(
                 entrypoint, "botsetup", return_value=(bot, "token")
             ) as botsetup,
@@ -100,10 +103,13 @@ class MainLifecycleTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=db),
             ) as db_init,
         ):
-            await entrypoint.main(debugger_enabled=True)
+            await entrypoint.main(
+                debugger_enabled=True,
+                prometheus_enabled=False,
+            )
 
         db_init.assert_awaited_once_with()
-        botsetup.assert_called_once_with(db, True)
+        botsetup.assert_called_once_with(db, True, monitor)
         bot.start.assert_awaited_once_with("token")
         bot.close.assert_awaited_once_with()
         db.close.assert_awaited_once_with()
@@ -111,8 +117,10 @@ class MainLifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def test_cleanup_runs_when_bot_start_fails(self) -> None:
         bot = FakeBot(RuntimeError("startup failed"))
         db = SimpleNamespace(close=AsyncMock())
+        monitor = Mock()
 
         with (
+            patch.object(entrypoint, "init_monitor", return_value=monitor),
             patch.object(entrypoint, "botsetup", return_value=(bot, "token")),
             patch.object(
                 entrypoint.DBLogic,
@@ -121,7 +129,10 @@ class MainLifecycleTests(unittest.IsolatedAsyncioTestCase):
             ),
             self.assertRaisesRegex(RuntimeError, "startup failed"),
         ):
-            await entrypoint.main(debugger_enabled=False)
+            await entrypoint.main(
+                debugger_enabled=False,
+                prometheus_enabled=False,
+            )
 
         bot.close.assert_awaited_once_with()
         db.close.assert_awaited_once_with()

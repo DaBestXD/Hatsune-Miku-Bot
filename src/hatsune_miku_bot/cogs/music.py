@@ -22,6 +22,7 @@ from hatsune_miku_bot.audio.guild_state_controller import (
 from hatsune_miku_bot.audio.playback_helpers import join_vc
 from hatsune_miku_bot.audio.queue_view import QueueEmbed, QueueView
 from hatsune_miku_bot.db_logging.db_main import DBLogic
+from hatsune_miku_bot.monitoring.factory import DisabledMonitor, Monitor
 from hatsune_miku_bot.utils.discord_helpers import (
     code_block_embed,
     gen_bot_thumbnail,
@@ -38,13 +39,19 @@ class MikuMusicCommands(commands.Cog):
     Cogname: musicplayer
     """
 
-    def __init__(self, bot: commands.Bot, db_logic: DBLogic) -> None:
+    def __init__(
+        self,
+        bot: commands.Bot,
+        db_logic: DBLogic,
+        monitor: Monitor | None = None,
+    ) -> None:
         self.bot: commands.Bot = bot
         self.guildstate_con_dict: dict[int, GuildStateController] = {}
         self.synced: bool = False
         self.audio_session: ClientSession | None = None
         self.audio_info_resolver: AudioInfoResolver | None = None
         self.db_logic = db_logic
+        self.monitor = monitor if monitor else DisabledMonitor()
 
     @override
     async def cog_load(self) -> None:
@@ -122,7 +129,10 @@ class MikuMusicCommands(commands.Cog):
             },
         )
         self.guildstate_con_dict[guild.id] = GuildStateController(
-            self.bot, guild.id, self.db_logic
+            self.bot,
+            guild.id,
+            self.db_logic,
+            self.monitor,
         )
         await self.guildstate_con_dict[guild.id].run()
         return None
@@ -132,7 +142,10 @@ class MikuMusicCommands(commands.Cog):
         if not self.synced:
             for g in self.bot.guilds:
                 self.guildstate_con_dict[g.id] = GuildStateController(
-                    self.bot, g.id, self.db_logic
+                    self.bot,
+                    g.id,
+                    self.db_logic,
+                    self.monitor,
                 )
                 await self.guildstate_con_dict[g.id].run()
                 logger.info(
