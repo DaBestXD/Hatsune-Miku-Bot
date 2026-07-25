@@ -46,7 +46,7 @@ SP_TRACK_LINK = "https://api.spotify.com/v1/tracks/"
 SP_PLAYLIST_LINK = "https://api.spotify.com/v1/playlists/"
 YOUTUBE_INFO_PARAMS: _Params = {
     "allowed_extractors": ["youtube", "youtube:tab", "end"],
-    "js_runtimes": {"node": {}},
+    "js_runtimes": {"quickjs": {}},
     "quiet": True,
     "extractor_args": {"youtube": {"skip": ["hls", "dash", "translated_subs"]}},
     "logger": YT_DLP_LOGGER,
@@ -69,7 +69,7 @@ SPOTIFY_SEARCH_PARAMS: _Params = {
 YOUTUBE_AUDIO_PARAMS: _Params = {
     "allowed_extractors": ["youtube", "end"],
     "format": "bestaudio/best",
-    "js_runtimes": {"node": {}},
+    "js_runtimes": {"quickjs": {}},
     "noplaylist": True,
     "quiet": True,
     "logger": YT_DLP_LOGGER,
