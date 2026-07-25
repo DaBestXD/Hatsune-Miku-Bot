@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import time
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, Self, override
 
 import discord
 
@@ -169,6 +169,7 @@ class Song:
         embed.set_footer(text=footer_text)
         return embed
 
+    @override
     def __str__(self) -> str:
         var_list = [f"{k} : {v}" for k, v in self.__dict__.items()]
         return "\n".join(var_list)
@@ -267,5 +268,6 @@ class Playlist:
             return None
         return max(valid_songs, key=lambda s: int(s.view_count))
 
+    @override
     def __str__(self) -> str:
         return f"""Playlist title: {self.playlist_title}\nPlaylist url: {self.playlist_url}\nPlaylist length: {self.length}\nPlaylist thumbnail: {self.playlist_thumbnail}\nTotal duration: {self.formatted_duration} """  # noqa: E501

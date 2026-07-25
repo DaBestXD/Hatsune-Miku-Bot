@@ -72,13 +72,17 @@ class LoggingConfigTests(unittest.TestCase):
             patch("sys.stdout", console),
         ):
             listener = logging_setup.setup_logging()
-            with listener:
-                logging.getLogger("tests.logging").warning(
-                    "Color logging test",
-                    extra={"event": "color_logging_test"},
-                )
+            try:
+                with listener:
+                    logging.getLogger("tests.logging").warning(
+                        "Color logging test",
+                        extra={"event": "color_logging_test"},
+                    )
 
-            file_output = (Path(directory) / "logs" / "bot.log").read_text()
+                file_output = (Path(directory) / "logs" / "bot.log").read_text()
+            finally:
+                logging.shutdown()
+                logging.getLogger().handlers.clear()
 
         self.assertIn("\033[33mWARNING\033[0m", console.getvalue())
         self.assertIn("Color logging test", file_output)
@@ -96,16 +100,20 @@ class LoggingConfigTests(unittest.TestCase):
             patch("sys.stdout", console),
         ):
             listener = logging_setup.setup_logging()
-            with listener:
-                logging.getLogger("tests.logging").warning(
-                    "JSON logging test",
-                    extra={
-                        "event": "json_logging_test",
-                        "guild_id": 42,
-                    },
-                )
+            try:
+                with listener:
+                    logging.getLogger("tests.logging").warning(
+                        "JSON logging test",
+                        extra={
+                            "event": "json_logging_test",
+                            "guild_id": 42,
+                        },
+                    )
 
-            file_output = (Path(directory) / "logs" / "bot.log").read_text()
+                file_output = (Path(directory) / "logs" / "bot.log").read_text()
+            finally:
+                logging.shutdown()
+                logging.getLogger().handlers.clear()
 
         console_record = json.loads(console.getvalue())
         file_record = json.loads(file_output)

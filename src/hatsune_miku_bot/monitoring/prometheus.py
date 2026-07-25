@@ -71,8 +71,8 @@ class PrometheusMonitoring:
             registry=self.registry,
         )
         self.event_duration = Histogram(
-            name="event_duration_seconds",
-            documentation="Guild controller event processing duration",
+            name="event_handler_duration_seconds",
+            documentation="Guild controller event handler processing duration",
             labelnames=("event",),
             buckets=(
                 0.0001,
