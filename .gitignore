@@ -8,3 +8,5 @@ test.py
 data/
 dist
 logs/
+.ruff_cache
+.pytest_cache

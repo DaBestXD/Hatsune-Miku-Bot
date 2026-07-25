@@ -3,6 +3,8 @@ services:
     build: .
     image: hatsune-miku-bot
     container_name: hatsune-miku-bot
+    init: true
+    stop_grace_period: 15s
     env_file:
       - .env
     volumes:

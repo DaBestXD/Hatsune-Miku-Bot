@@ -21,6 +21,10 @@ FROM debian:trixie-slim AS quickjs-builder
 ARG QUICKJS_VERSION=2026-06-04
 ARG QUICKJS_SHA256=b376e839b322978313d929fd20663b11ba58b75df5a46c126dd19ea2fa70ad2a
 
+# Make every pipeline fail when any command in it fails, not only the last one.
+# This is required for the checksum verification pipeline below (DL4006).
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # The build dependencies remain in this disposable stage.
 # hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -56,7 +60,10 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates \
   libopus0 \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd --gid 10001 bot \
+  && useradd --uid 10001 --gid bot --no-create-home \
+  --home-dir /nonexistent --shell /usr/sbin/nologin bot
 
 COPY --from=ffmpeg /ffmpeg /usr/local/bin/ffmpeg
 COPY --from=quickjs-builder /tmp/quickjs/qjs /usr/local/bin/qjs
@@ -64,7 +71,13 @@ COPY --from=builder /app/.venv ./.venv
 COPY src ./src
 RUN qjs -e 'console.log("QuickJS runtime ready")' \
   && ffmpeg -hide_banner -version \
-  && mkdir -p /app/logs /app/data
+  && install -d --owner=bot --group=bot --mode=0750 /app/logs /app/data \
+  && install -d --mode=1777 /tmp
+
+# The application and dependencies remain root-owned and read-only to the
+# unprivileged runtime process. Logs and data are private to the bot, while
+# /tmp remains writable with the sticky bit for QuickJS and other subprocesses.
+USER 10001:10001
 
 # You can change the output of the logs to "color" if you prefer more
 # humanreadble logs
