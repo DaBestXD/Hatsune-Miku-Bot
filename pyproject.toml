@@ -15,6 +15,11 @@ dependencies = [
 [project.scripts]
 hatsune-miku-bot = "hatsune_miku_bot.__main__:run"
 
+[project.optional-dependencies]
+prometheus = [
+    "prometheus-client>=0.25.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest",
