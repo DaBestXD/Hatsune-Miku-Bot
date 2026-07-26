@@ -19,10 +19,38 @@ services:
       - "127.0.0.1:9090:9090"
     restart: unless-stopped
 
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.57.0
+    container_name: hatsune-miku-cadvisor
+    depends_on:
+      hatsune-miku-bot:
+        condition: service_started
+    network_mode: "service:hatsune-miku-bot"
+    privileged: true
+    command:
+      - "--docker_only=true"
+      - "--housekeeping_interval=5s"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:v3.13.1
     container_name: hatsune-miku-prometheus
     depends_on:
+      cadvisor:
+        condition: service_started
       hatsune-miku-bot:
         condition: service_started
     network_mode: "service:hatsune-miku-bot"

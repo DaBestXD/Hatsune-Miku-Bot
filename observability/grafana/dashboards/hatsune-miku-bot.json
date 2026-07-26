@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "Operational overview for the Hatsune Miku Discord music bot.",
+  "description": "Operational and container-resource overview for the Hatsune Miku Discord music bot.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -67,8 +67,8 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 6,
-        "x": 0,
+        "w": 8,
+        "x": 8,
         "y": 0
       },
       "id": 1,
@@ -118,11 +118,11 @@
               "options": {
                 "0": {
                   "color": "red",
-                  "text": "DISCONNECTED"
+                  "text": "OFFLINE"
                 },
                 "1": {
                   "color": "green",
-                  "text": "CONNECTED"
+                  "text": "ONLINE"
                 }
               },
               "type": "value"
@@ -146,8 +146,8 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 6,
-        "x": 6,
+        "w": 8,
+        "x": 16,
         "y": 0
       },
       "id": 2,
@@ -217,10 +217,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 5,
-        "w": 6,
+        "h": 8,
+        "w": 12,
         "x": 12,
-        "y": 0
+        "y": 26
       },
       "id": 3,
       "options": {
@@ -284,9 +284,9 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 6,
-        "x": 18,
-        "y": 0
+        "w": 8,
+        "x": 8,
+        "y": 13
       },
       "id": 4,
       "options": {
@@ -348,7 +348,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 5
+        "y": 18
       },
       "id": 5,
       "options": {
@@ -411,7 +411,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 5
+        "y": 18
       },
       "id": 6,
       "options": {
@@ -516,9 +516,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 13
+        "w": 8,
+        "x": 16,
+        "y": 5
       },
       "id": 9,
       "options": {
@@ -596,7 +596,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 21
+        "y": 26
       },
       "id": 7,
       "options": {
@@ -662,10 +662,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 21
+        "h": 5,
+        "w": 8,
+        "x": 16,
+        "y": 13
       },
       "id": 8,
       "options": {
@@ -697,6 +697,372 @@
       ],
       "title": "Playback Failures",
       "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Whether Prometheus can scrape cAdvisor container metrics.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "text": "OFFLINE"
+                },
+                "1": {
+                  "color": "green",
+                  "text": "ONLINE"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "id": 10,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "up{job=\"cadvisor\"}",
+          "instant": true,
+          "legendFormat": "cAdvisor",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Container Metrics",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Out-of-memory events reported for the bot container over the selected dashboard range.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 0,
+        "y": 13
+      },
+      "id": 13,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(increase(container_oom_events_total{name=\"hatsune-miku-bot\"}[$__range])) or vector(0)",
+          "instant": true,
+          "legendFormat": "OOM events",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Container OOM Events",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Total bot-container CPU consumption and the percentage of CPU scheduling periods throttled by its cgroup.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "decimals": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 5
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{name=\"hatsune-miku-bot\"}[$__rate_interval])) * 100",
+          "instant": false,
+          "legendFormat": "CPU usage",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "100 * sum(rate(container_cpu_cfs_throttled_periods_total{name=\"hatsune-miku-bot\"}[$__rate_interval])) / clamp_min(sum(rate(container_cpu_cfs_periods_total{name=\"hatsune-miku-bot\"}[$__rate_interval])), 0.000001)",
+          "instant": false,
+          "legendFormat": "throttled periods",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Container CPU History",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Container working set and resident memory. The working set is the better signal for memory pressure; RSS highlights resident process memory.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "decimals": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2147483648
+              },
+              {
+                "color": "red",
+                "value": 3221225472
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 5
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "container_memory_working_set_bytes{name=\"hatsune-miku-bot\"}",
+          "instant": false,
+          "legendFormat": "working set",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "container_memory_rss{name=\"hatsune-miku-bot\"}",
+          "instant": false,
+          "legendFormat": "RSS",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Container Memory History",
+      "type": "timeseries"
     }
   ],
   "refresh": "15s",
@@ -704,7 +1070,8 @@
   "tags": [
     "discord",
     "hatsune-miku-bot",
-    "prometheus"
+    "prometheus",
+    "cadvisor"
   ],
   "templating": {
     "list": []
@@ -717,6 +1084,6 @@
   "timezone": "browser",
   "title": "Hatsune Miku Bot Overview",
   "uid": "hatsune-miku-bot-overview",
-  "version": 1,
+  "version": 5,
   "weekStart": ""
 }
