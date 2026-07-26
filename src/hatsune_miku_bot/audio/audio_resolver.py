@@ -8,7 +8,7 @@ import time
 from difflib import SequenceMatcher
 from itertools import islice
 from typing import TYPE_CHECKING, Any
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import parse_qs, quote_plus, urlparse
 
 import aiohttp
 from yt_dlp import YoutubeDL
@@ -610,6 +610,13 @@ class AudioInfoResolver:
         # have only expected one song(Retard protection)
         # Unsure if I want to keep this feature removed
         try:
+            parsed_url = urlparse(url)
+            playlist_ids = parse_qs(parsed_url.query).get("list")
+            if playlist_ids and parsed_url.path.rstrip("/") != "/playlist":
+                url = (
+                    "https://www.youtube.com/playlist?list="
+                    f"{quote_plus(playlist_ids[0])}"
+                )
             with YoutubeDL(params=YOUTUBE_INFO_PARAMS) as ydl:
                 result = ydl.extract_info(url, download=False, process=False)
                 if "entries" not in result:

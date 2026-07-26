@@ -5,6 +5,42 @@
 User-facing changes and developer-facing internal changes are tracked together.
 Dates are listed without release versions for now.
 
+## 2026-07-25
+
+### Added
+
+- Added a Docker Compose observability stack with Prometheus collection, persistent 15-day metric storage, and a provisioned Grafana dashboard for bot health, Discord gateway latency, guild event processing, and playback lifecycle results.
+- Added `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` environment settings for the bundled Grafana service.
+
+### Changed
+
+- Reworked the Docker image into a multi-stage build with a checksum-verified QuickJS runtime, a pinned static FFmpeg binary, and only the required runtime libraries in the final image.
+- Enabled Prometheus monitoring in the production container and exposed the Prometheus and Grafana interfaces only on loopback ports `9090` and `3000`.
+- Changed the production container to run as an unprivileged user and added an init process and 15-second shutdown grace period for cleaner bot termination.
+
+### Fixed
+
+- Patched certain youtube playlist links from returning no songs
+- Fixed CI by installing the optional Prometheus dependencies before type checks and tests.
+- Fixed logging test teardown so queue listeners and file handlers no longer remain open, particularly on Windows.
+
+### Internal
+
+- Moved `prometheus-client` into an optional `prometheus` dependency group so non-monitoring installations can remain smaller.
+- Added `scripts/fixy.py` to run type checks, formatting, lint fixes, and tests through one command, and removed the legacy platform-specific setup and run scripts.
+- Restored strict missing-override checking after adding the required override annotations.
+
+## 2026-07-24
+
+### Added
+
+- Added optional Prometheus monitoring, enabled with `--prometheus_enabled`, with metrics for bot readiness, Discord gateway latency, guild event totals and durations, and playback lifecycle results.
+
+### Internal
+
+- Added a no-op monitoring implementation so metrics can remain disabled without spreading enabled-state checks throughout the bot.
+- Added monitoring lifecycle handling and coverage for startup, shutdown, Discord connectivity, command setup, guild event processing, and playback outcomes.
+
 ## 2026-07-23
 
 ### Added

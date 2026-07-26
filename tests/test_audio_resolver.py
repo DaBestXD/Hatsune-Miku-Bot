@@ -724,6 +724,50 @@ class YtDlpResolverTests(unittest.TestCase):
             ],
         )
 
+    def test_get_youtube_info_treats_url_with_list_as_playlist(
+        self,
+    ) -> None:
+        playlist_id = "PLYVt6sUD_amTtozqHuhl0uPs2oy34HQLm"
+        playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+        urls = [
+            (f"https://www.youtube.com/watch?v=NocXEwsJGOQ&list={playlist_id}"),
+            (f"https://www.youtube.com/watch?list={playlist_id}&v=NocXEwsJGOQ"),
+            f"https://youtu.be/NocXEwsJGOQ?list={playlist_id}",
+            f"https://www.youtube.com/shorts/NocXEwsJGOQ?list={playlist_id}",
+            f"https://www.youtube.com/live/NocXEwsJGOQ?list={playlist_id}",
+            f"https://www.youtube.com/watch?v=AAwatchBBBB&list={playlist_id}",
+        ]
+
+        for url in urls:
+            with self.subTest(url=url):
+                ydl = MagicMock()
+                ydl.extract_info.return_value = {
+                    "title": "Playlist",
+                    "original_url": playlist_url,
+                    "entries": [
+                        {
+                            "title": "Track",
+                            "url": None,
+                            "original_url": (
+                                "https://www.youtube.com/watch?v=NocXEwsJGOQ"
+                            ),
+                            "duration": 60,
+                            "view_count": 5,
+                        }
+                    ],
+                }
+
+                with patch.object(
+                    resolver, "YoutubeDL", return_value=ydl_context(ydl)
+                ):
+                    result = self.audio_resolver.get_youtube_info(url)
+
+                self.assertIsInstance(result, Playlist)
+                self.assertEqual(len(as_any(result).songs), 1)
+                ydl.extract_info.assert_called_once_with(
+                    playlist_url, download=False, process=False
+                )
+
     def test_get_youtube_info_returns_none_for_empty_playlist(self) -> None:
         url = "https://youtube.test/playlist?list=empty"
         ydl = MagicMock()
