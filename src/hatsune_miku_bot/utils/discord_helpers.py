@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TypedDict, Unpack
+from urllib.parse import urlparse
 
 import discord
 from discord import (
@@ -60,3 +61,15 @@ def code_block_embed(txt: list[str], title: str) -> discord.Embed:
     embed = discord.Embed(color=discord.Color.blue())
     embed.add_field(name=title, value="\n".join(body_txt))
     return embed
+
+
+def _is_http_url(value: str | None) -> bool:
+    if not value:
+        return False
+    try:
+        parsed_url = urlparse(value)
+    except ValueError:
+        return False
+    return parsed_url.scheme.casefold() in {"http", "https"} and bool(
+        parsed_url.netloc
+    )

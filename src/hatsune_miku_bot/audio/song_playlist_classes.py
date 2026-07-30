@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any, Self, override
 
 import discord
 
+from hatsune_miku_bot.utils.discord_helpers import _is_http_url
+
 if TYPE_CHECKING:
     from yt_dlp.extractor.common import _InfoDict
 else:
@@ -17,14 +19,16 @@ class Song:
     def __init__(
         self,
         title: str,
-        webpage_url: str,
-        thumbnail_url: str,
+        webpage_url: str | None,
+        thumbnail_url: str | None,
         duration: str,
         view_count: str,
     ) -> None:
         self.title: str = title
-        self.webpage_url: str = webpage_url
-        self.thumbnail_url: str = thumbnail_url
+        self.webpage_url = webpage_url if _is_http_url(webpage_url) else None
+        self.thumbnail_url = (
+            thumbnail_url if _is_http_url(thumbnail_url) else None
+        )
         try:
             self.duration = int(float(duration))
             if self.duration < 3600:
@@ -44,7 +48,7 @@ class Song:
     def from_spotify(
         cls,
         json_reponse: dict[str, Any],
-        album_thumbnail: str,
+        album_thumbnail: str | None,
     ) -> Self:
         if album_thumbnail:
             song_name = json_reponse["name"]
@@ -57,7 +61,7 @@ class Song:
             artist = json_reponse["artists"][0]["name"]
             _thumbnails = json_reponse["album"]["images"]
             if not _thumbnails:
-                album_thumbnail = ""
+                album_thumbnail = None
             else:
                 album_thumbnail = json_reponse["album"]["images"][0]["url"]
             duration = json_reponse["duration_ms"] // 1000
@@ -68,17 +72,18 @@ class Song:
     def from_yt_dlp(cls, _info_dict: _InfoDict) -> Self:
         # TODO: this whole string situation needs to change
         thumbnails = _info_dict.get("thumbnails")
-        thumbnail_url = ""
+        thumbnail_url = None
+        webpage_url = (
+            _info_dict.get("webpage_url")
+            or _info_dict.get("original_url")
+            or _info_dict.get("url")
+        )
         # if not used here to exclude both empty lists and none values
         if thumbnails and isinstance(thumbnails, list):
             thumbnail_url = thumbnails[-1]["url"]
         return cls(
             title=str(_info_dict.get("title")),
-            webpage_url=str(
-                _info_dict.get("webpage_url")
-                or _info_dict.get("original_url")
-                or _info_dict.get("url")
-            ),
+            webpage_url=str(webpage_url) if webpage_url else None,
             thumbnail_url=thumbnail_url,
             duration=str(_info_dict.get("duration")),
             view_count=str(_info_dict.get("view_count")),
@@ -87,12 +92,13 @@ class Song:
     @classmethod
     def from_yt_dlp_direct_link(cls, _info_dict: _InfoDict) -> Self:
         thumbnails = _info_dict.get("thumbnails")
-        thumbnail_url = ""
+        thumbnail_url = None
+        webpage_url = _info_dict.get("original_url")
         if thumbnails and isinstance(thumbnails, list):
             thumbnail_url = thumbnails[-1]["url"]
         return cls(
             title=str(_info_dict.get("title")),
-            webpage_url=str(_info_dict.get("original_url")),
+            webpage_url=str(webpage_url) if webpage_url else None,
             thumbnail_url=thumbnail_url,
             duration=str(_info_dict.get("duration")),
             view_count=str(_info_dict.get("view_count")),
@@ -123,7 +129,8 @@ class Song:
             color=discord.Color.blue(),
         )
         embed.set_author(name=author_title)
-        embed.set_thumbnail(url=self.thumbnail_url)
+        if self.thumbnail_url:
+            embed.set_thumbnail(url=self.thumbnail_url)
         if next_song:
             footer_title = next_song.title[:char_limit]
             if len(footer_title) >= char_limit:
@@ -141,7 +148,8 @@ class Song:
             color=discord.Color.blue(),
         )
         embed.set_author(name="Error trying to play:")
-        embed.set_thumbnail(url=self.thumbnail_url)
+        if self.thumbnail_url:
+            embed.set_thumbnail(url=self.thumbnail_url)
         embed.set_footer(text="Skipping...")
         return embed
 
@@ -165,8 +173,30 @@ class Song:
             color=discord.Color.blue(),
         )
         embed.set_author(name="Skipping...")
-        embed.set_thumbnail(url=self.thumbnail_url)
+        if self.thumbnail_url:
+            embed.set_thumbnail(url=self.thumbnail_url)
         embed.set_footer(text=footer_text)
+        return embed
+
+    def add_song_to_custom_playlist(
+        self, playlist_name: str, added: bool, char_limit: int = 30
+    ) -> discord.Embed:
+        safe_title = self.title[:char_limit]
+        if len(safe_title) >= char_limit:
+            safe_title += "..."
+        embed = discord.Embed(
+            title=safe_title,
+            url=self.webpage_url,
+            description=f"Song length: `{self.formatted_duration}`",
+            color=discord.Color.blue(),
+        )
+        if added:
+            author_title = f"Added to custom playlist: {playlist_name}"
+        else:
+            author_title = f"Failed to add to custom playlist: {playlist_name}"
+        embed.set_author(name=author_title)
+        if self.thumbnail_url:
+            embed.set_thumbnail(url=self.thumbnail_url)
         return embed
 
     @override
@@ -180,12 +210,14 @@ class Playlist:
         self,
         songs: list[Song],
         playlist_title: str = "Default",
-        playlist_url: str = "None",
-        playlist_thumbnail: str = "None",
+        playlist_url: str | None = None,
+        playlist_thumbnail: str | None = None,
     ) -> None:
         self.playlist_title = playlist_title
-        self.playlist_url = playlist_url
-        self.playlist_thumbnail = playlist_thumbnail
+        self.playlist_url = playlist_url if _is_http_url(playlist_url) else None
+        self.playlist_thumbnail = (
+            playlist_thumbnail if _is_http_url(playlist_thumbnail) else None
+        )
         self.songs: list[Song] = songs
         self.length = len(songs)
         self.total_duration: int = sum([s.duration for s in self.songs])
@@ -209,7 +241,7 @@ class Playlist:
         else:
             playlist_name = json_metadata_response["name"]
             thumbnail_url = json_metadata_response["images"][0]["url"]
-            album_thumbnail = ""
+            album_thumbnail = None
         songs: list[Song] = []
         for item in json_songs_response["items"]:
             song_json = item if is_album else item.get("track")
@@ -224,14 +256,15 @@ class Playlist:
     ) -> Self:
         songs = [Song.from_yt_dlp(e) for e in entries if e]
         thumbnails = result.get("thumbnails")
-        thumbnail_url = ""
+        thumbnail_url = None
         # if not used here to exclude both empty lists and none values
         if thumbnails and isinstance(thumbnails, list):
             thumbnail_url = thumbnails[-1]["url"]
+        original_url = result.get("original_url")
         return cls(
             songs,
             str(result.get("title")),
-            str(result.get("original_url")),
+            str(original_url) if original_url else None,
             thumbnail_url,
         )
 
@@ -243,7 +276,8 @@ class Playlist:
             color=discord.Color.blue(),
         )
         embed.set_author(name=f"Added {self.length} songs to the queue")
-        embed.set_thumbnail(url=self.playlist_thumbnail)
+        if self.playlist_thumbnail:
+            embed.set_thumbnail(url=self.playlist_thumbnail)
         return embed
 
     def return_err_embed(self) -> discord.Embed:
@@ -254,7 +288,8 @@ class Playlist:
             color=discord.Color.blue(),
         )
         embed.set_author(name="Error trying to play:")
-        embed.set_thumbnail(url=self.playlist_thumbnail)
+        if self.playlist_thumbnail:
+            embed.set_thumbnail(url=self.playlist_thumbnail)
         embed.set_footer(text="Skipping...")
         return embed
 
@@ -271,3 +306,21 @@ class Playlist:
     @override
     def __str__(self) -> str:
         return f"""Playlist title: {self.playlist_title}\nPlaylist url: {self.playlist_url}\nPlaylist length: {self.length}\nPlaylist thumbnail: {self.playlist_thumbnail}\nTotal duration: {self.formatted_duration} """  # noqa: E501
+
+    def add_song_to_custom_playlist(
+        self, playlist_name: str, added: bool
+    ) -> discord.Embed:
+        embed = discord.Embed(
+            title=self.playlist_title,
+            url=self.playlist_url,
+            description=f"Playlist length: `{self.formatted_duration}`",
+            color=discord.Color.blue(),
+        )
+        if added:
+            author_title = f"Added to custom playlist: {playlist_name}"
+        else:
+            author_title = f"Failed to add to custom playlist: {playlist_name}"
+        embed.set_author(name=author_title)
+        if self.playlist_thumbnail:
+            embed.set_thumbnail(url=self.playlist_thumbnail)
+        return embed

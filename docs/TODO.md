@@ -1,7 +1,8 @@
 <!-- markdownlint-disable -->
 # TODO
 
-- Add CPU/memory usage
+- Add logging to new custom playlist logic, and other db logic
+- Add custom-playlist viewer embed
 - Implement deterministic Spotify-to-YouTube fuzzy matching based on the song !HALF-DONE!
 - Add SoundCloud playlist support.
 - Add ability to pass in cookie files for soundcloud and youtube

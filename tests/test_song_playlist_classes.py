@@ -46,7 +46,7 @@ class SongTests(unittest.TestCase):
             "album": {"images": [{"url": "https://image.test/track.jpg"}]},
         }
 
-        track = Song.from_spotify(response, "")
+        track = Song.from_spotify(response, None)
         album_track = Song.from_spotify(
             response, "https://image.test/album.jpg"
         )
@@ -76,6 +76,23 @@ class SongTests(unittest.TestCase):
 
         self.assertEqual(song.thumbnail_url, "https://image.test/large.jpg")
         self.assertEqual(song.view_count, "123")
+
+    def test_from_yt_dlp_preserves_missing_urls_as_none(self) -> None:
+        song = Song.from_yt_dlp(
+            as_any(
+                {
+                    "title": "Tell Your World",
+                    "duration": 250,
+                    "view_count": 123,
+                }
+            )
+        )
+
+        self.assertIsNone(song.webpage_url)
+        self.assertIsNone(song.thumbnail_url)
+        embed_data = song.return_embed().to_dict()
+        self.assertNotIn("url", embed_data)
+        self.assertNotIn("thumbnail", embed_data)
 
     def test_from_yt_dlp_direct_link_uses_original_url(self) -> None:
         song = Song.from_yt_dlp_direct_link(
@@ -113,8 +130,52 @@ class SongTests(unittest.TestCase):
         self.assertEqual(skipped.author.name, "Skipping...")
         self.assertEqual(error.author.name, "Error trying to play:")
 
+    def test_init_replaces_invalid_urls_with_none(self) -> None:
+        valid_song = make_song()
+        invalid_urls = (
+            "",
+            "None",
+            "https://",
+            "ftp://image.test/cover.jpg",
+            "http://[",
+        )
+
+        valid_embed = valid_song.add_song_to_custom_playlist("Miku Mix", True)
+
+        self.assertEqual(
+            valid_embed.to_dict()["thumbnail"]["url"],
+            valid_song.thumbnail_url,
+        )
+        for invalid_url in invalid_urls:
+            with self.subTest(invalid_url=invalid_url):
+                song = Song(
+                    "Melt",
+                    invalid_url,
+                    invalid_url,
+                    "180",
+                    "10",
+                )
+                embed = song.add_song_to_custom_playlist("Miku Mix", True)
+
+                self.assertIsNone(song.webpage_url)
+                self.assertIsNone(song.thumbnail_url)
+                self.assertNotIn("url", embed.to_dict())
+                self.assertNotIn("thumbnail", embed.to_dict())
+
 
 class PlaylistTests(unittest.TestCase):
+    def test_init_replaces_invalid_urls_with_none(self) -> None:
+        playlist = Playlist(
+            [make_song()],
+            playlist_url="ftp://playlist.test/list",
+            playlist_thumbnail="https://",
+        )
+
+        self.assertIsNone(playlist.playlist_url)
+        self.assertIsNone(playlist.playlist_thumbnail)
+        self.assertNotIn("url", playlist.return_embed().to_dict())
+        self.assertNotIn("thumbnail", playlist.return_embed().to_dict())
+
     def test_playlist_supports_empty_songs_and_summarizes_duration(
         self,
     ) -> None:
@@ -136,6 +197,10 @@ class PlaylistTests(unittest.TestCase):
         self.assertEqual(
             playlist.return_embed().author.name, "Added 2 songs to the queue"
         )
+        self.assertNotIn("url", playlist.return_embed().to_dict())
+        self.assertNotIn("thumbnail", playlist.return_embed().to_dict())
+        self.assertNotIn("url", playlist.return_err_embed().to_dict())
+        self.assertNotIn("thumbnail", playlist.return_err_embed().to_dict())
 
     def test_from_spotify_supports_playlist_and_album_payloads(self) -> None:
         metadata = {

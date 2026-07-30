@@ -493,7 +493,7 @@ class AudioInfoResolver:
                     },
                 )
                 return None
-            return Song.from_spotify(song, "")
+            return Song.from_spotify(song, None)
         logger.warning(
             "Spotify resource type could not be determined from %s",
             path_type,
@@ -585,7 +585,9 @@ class AudioInfoResolver:
                     return None
                 songs = [Song.from_yt_dlp(e) for e in entries if e]
                 # Filter out channel results
-                songs = [s for s in songs if "channel/" not in s.webpage_url]
+                songs = [
+                    s for s in songs if "channel/" not in (s.webpage_url or "")
+                ]
                 if not songs:
                     return None
                 return Playlist(songs).greatest_view_count()
@@ -786,9 +788,12 @@ def _get_spotify_source_impl(query: Song) -> str | None:
 
 def _get_audio_source_impl(query: Song) -> str | None:
     try:
-        if "spotify" in query.webpage_url:
+        webpage_url = query.webpage_url
+        if not webpage_url:
+            return None
+        if "spotify" in webpage_url:
             return _get_spotify_source_impl(query)
-        hostname = urlparse(query.webpage_url).hostname
+        hostname = urlparse(webpage_url).hostname
         if not hostname:
             logger.debug(
                 "Audio source URL did not contain a hostname for %s",
@@ -807,11 +812,11 @@ def _get_audio_source_impl(query: Song) -> str | None:
             params = YOUTUBE_AUDIO_PARAMS
             audio_provider = "youtube"
         with YoutubeDL(params) as ydl:
-            result = ydl.extract_info(url=query.webpage_url, download=False)
+            result = ydl.extract_info(url=webpage_url, download=False)
             logger.info(
                 "Loaded audio for non-spotify link: %s, %s",
                 query.title,
-                query.webpage_url.replace("https://", ""),
+                webpage_url.replace("https://", ""),
                 extra={
                     "event": "audio_source_resolved",
                     "audio_provider": audio_provider,

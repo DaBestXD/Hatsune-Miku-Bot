@@ -7,6 +7,8 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, Mock, call, patch
 
+import aiosqlite
+
 import hatsune_miku_bot.audio.audio_resolver as resolver_module
 import hatsune_miku_bot.audio.guild_state_controller as controller_module
 import hatsune_miku_bot.audio.song_cache as song_cache_module
@@ -17,6 +19,10 @@ from hatsune_miku_bot.audio.guild_state_controller import (
 )
 from hatsune_miku_bot.audio.song_cache import CachedSong
 from hatsune_miku_bot.audio.song_playlist_classes import Playlist, Song
+from hatsune_miku_bot.db_logging.db_main import (
+    PlaylistSongRemovalResult,
+    PlaylistSongRemovalStatus,
+)
 from tests.helpers import module_proxy
 
 
@@ -32,8 +38,13 @@ def make_controller() -> GuildStateController:
     bot = as_any(SimpleNamespace(loop=asyncio.get_running_loop()))
     db_logic = as_any(
         SimpleNamespace(
+            add_song_to_playlist=AsyncMock(),
+            create_custom_playlist=AsyncMock(),
+            delete_custom_playlist=AsyncMock(),
+            get_playlist_songs=AsyncMock(return_value=[]),
             insert_song_playback=AsyncMock(),
             rank_song_per_guild=AsyncMock(return_value=[]),
+            remove_song_from_playlist=AsyncMock(),
         )
     )
     return GuildStateController(bot, 42, db_logic)
@@ -42,6 +53,341 @@ def make_controller() -> GuildStateController:
 class FakeTextChannel:
     def __init__(self) -> None:
         self.send = AsyncMock()
+
+
+def reply_author(reply_mock: AsyncMock) -> str:
+    reply_call = reply_mock.await_args
+    assert reply_call is not None
+    embed = as_any(reply_call.kwargs["embed"])
+    return embed.author.name
+
+
+class CustomPlaylistTests(unittest.IsolatedAsyncioTestCase):
+    async def test_add_song_to_custom_playlist_replies_on_success(self) -> None:
+        controller = make_controller()
+        interaction = as_any(object())
+        song = make_song("Melt", "https://song.test/melt")
+        as_any(controller.db_logic).add_song_to_playlist.return_value = True
+
+        with patch.object(
+            controller_module,
+            "reply",
+            new=AsyncMock(),
+        ) as reply_mock:
+            await controller.add_song_to_custom_playlist(
+                interaction,
+                "Miku Mix",
+                song,
+            )
+
+        as_any(
+            controller.db_logic
+        ).add_song_to_playlist.assert_awaited_once_with(
+            interaction,
+            "Miku Mix",
+            song,
+        )
+        reply_call = reply_mock.await_args
+        assert reply_call is not None
+        embed = reply_call.kwargs["embed"]
+        self.assertEqual(
+            embed.author.name,
+            "Added to custom playlist: Miku Mix",
+        )
+
+    async def test_add_song_to_custom_playlist_replies_on_conflict(
+        self,
+    ) -> None:
+        controller = make_controller()
+        interaction = as_any(object())
+        song = make_song("Melt", "https://song.test/melt")
+        as_any(controller.db_logic).add_song_to_playlist.return_value = False
+
+        with patch.object(
+            controller_module,
+            "reply",
+            new=AsyncMock(),
+        ) as reply_mock:
+            await controller.add_song_to_custom_playlist(
+                interaction,
+                "Miku Mix",
+                song,
+            )
+
+        reply_call = reply_mock.await_args
+        assert reply_call is not None
+        embed = reply_call.kwargs["embed"]
+        self.assertEqual(
+            embed.author.name,
+            "Failed to add to custom playlist: Miku Mix",
+        )
+
+    async def test_add_song_to_custom_playlist_replies_on_db_error(
+        self,
+    ) -> None:
+        controller = make_controller()
+        interaction = as_any(object())
+        song = make_song("Melt", "https://song.test/melt")
+        as_any(
+            controller.db_logic
+        ).add_song_to_playlist.side_effect = aiosqlite.OperationalError(
+            "database unavailable"
+        )
+
+        with patch.object(
+            controller_module,
+            "reply",
+            new=AsyncMock(),
+        ) as reply_mock:
+            await controller.add_song_to_custom_playlist(
+                interaction,
+                "Miku Mix",
+                song,
+            )
+
+        reply_call = reply_mock.await_args
+        assert reply_call is not None
+        embed = reply_call.kwargs["embed"]
+        self.assertEqual(
+            embed.author.name,
+            "Error occurred adding song to playlist, try again!",
+        )
+
+    async def test_remove_song_from_custom_playlist_replies_on_success(
+        self,
+    ) -> None:
+        controller = make_controller()
+        interaction = as_any(object())
+        webpage_url = "https://song.test/melt"
+        as_any(
+            controller.db_logic
+        ).remove_song_from_playlist.return_value = PlaylistSongRemovalResult(
+            PlaylistSongRemovalStatus.REMOVED,
+            "Melt",
+        )
+
+        with patch.object(
+            controller_module,
+            "reply",
+            new=AsyncMock(),
+        ) as reply_mock:
+            await controller.remove_song_from_custom_playlist(
+                interaction,
+                "Miku Mix",
+                webpage_url,
+            )
+
+        as_any(
+            controller.db_logic
+        ).remove_song_from_playlist.assert_awaited_once_with(
+            interaction,
+            "Miku Mix",
+            webpage_url,
+        )
+        self.assertEqual(
+            reply_author(reply_mock),
+            "Removed Melt from Miku Mix!",
+        )
+
+    async def test_remove_song_from_custom_playlist_replies_when_missing(
+        self,
+    ) -> None:
+        controller = make_controller()
+        interaction = as_any(object())
+        webpage_url = "https://song.test/melt"
+        as_any(
+            controller.db_logic
+        ).remove_song_from_playlist.return_value = PlaylistSongRemovalResult(
+            PlaylistSongRemovalStatus.NOT_FOUND
+        )
+
+        with patch.object(
+            controller_module,
+            "reply",
+            new=AsyncMock(),
+        ) as reply_mock:
+            await controller.remove_song_from_custom_playlist(
+                interaction,
+                "Miku Mix",
+                webpage_url,
+            )
+
+        self.assertEqual(
+            reply_author(reply_mock),
+            "Song was not found in Miku Mix!",
+        )
+
+    async def test_remove_song_replies_when_title_is_ambiguous(
+        self,
+    ) -> None:
+        controller = make_controller()
+        interaction = as_any(object())
+        as_any(
+            controller.db_logic
+        ).remove_song_from_playlist.return_value = PlaylistSongRemovalResult(
+            PlaylistSongRemovalStatus.AMBIGUOUS_TITLE
+        )
+
+        with patch.object(
+            controller_module,
+            "reply",
+            new=AsyncMock(),
+        ) as reply_mock:
+            result = await controller.remove_song_from_custom_playlist(
+                interaction,
+                "Miku Mix",
+                "Melt",
+            )
+
+        self.assertIsNone(result)
+        self.assertEqual(
+            reply_author(reply_mock),
+            "Multiple songs named Melt were found in Miku Mix. Select an "
+            "autocomplete option or enter the song URL.",
+        )
+
+    async def test_delete_custom_playlist_replies_on_success(self) -> None:
+        controller = make_controller()
+        interaction = as_any(object())
+        as_any(controller.db_logic).delete_custom_playlist.return_value = True
+
+        with patch.object(
+            controller_module,
+            "reply",
+            new=AsyncMock(),
+        ) as reply_mock:
+            await controller.delete_custom_playlist(
+                interaction,
+                "Miku Mix",
+            )
+
+        self.assertEqual(reply_author(reply_mock), "Deleted Miku Mix!")
+
+    async def test_delete_custom_playlist_replies_when_missing(self) -> None:
+        controller = make_controller()
+        interaction = as_any(object())
+        as_any(controller.db_logic).delete_custom_playlist.return_value = False
+
+        with patch.object(
+            controller_module,
+            "reply",
+            new=AsyncMock(),
+        ) as reply_mock:
+            await controller.delete_custom_playlist(
+                interaction,
+                "Miku Mix",
+            )
+
+        self.assertEqual(
+            reply_author(reply_mock),
+            "Miku Mix was not found!",
+        )
+
+    async def test_play_custom_playlist_queues_ordered_songs(self) -> None:
+        controller = make_controller()
+        interaction = as_any(object())
+        vc = as_any(object())
+        songs = [
+            make_song("First", "https://song.test/1"),
+            make_song("Second", "https://song.test/2"),
+        ]
+        as_any(controller.db_logic).get_playlist_songs.return_value = songs
+        controller.queue_songs = AsyncMock()
+        controller.add_event = AsyncMock()
+
+        result = await controller.play_custom_playlist(
+            interaction,
+            "Miku Mix",
+            vc,
+        )
+
+        self.assertEqual(result, songs)
+        queue_call = as_any(controller.queue_songs).await_args
+        assert queue_call is not None
+        playlist = queue_call.args[1]
+        self.assertIsInstance(playlist, Playlist)
+        self.assertEqual(playlist.songs, songs)
+        self.assertEqual(playlist.playlist_title, "Custom Playlist: Miku Mix")
+        embed_data = playlist.return_embed().to_dict()
+        self.assertNotIn("url", embed_data)
+        self.assertEqual(
+            embed_data["thumbnail"]["url"],
+            songs[0].thumbnail_url,
+        )
+        as_any(controller.add_event).assert_awaited_once_with(
+            controller.begin_playback
+        )
+
+    async def test_play_custom_playlist_replies_when_empty(self) -> None:
+        controller = make_controller()
+        interaction = as_any(object())
+
+        with patch.object(
+            controller_module,
+            "reply",
+            new=AsyncMock(),
+        ) as reply_mock:
+            result = await controller.play_custom_playlist(
+                interaction,
+                "Miku Mix",
+                as_any(object()),
+            )
+
+        self.assertEqual(result, [])
+        self.assertEqual(
+            reply_author(reply_mock),
+            "Miku Mix is empty or missing!",
+        )
+
+    async def test_playlist_operations_reply_on_db_errors(self) -> None:
+        controller = make_controller()
+        interaction = as_any(object())
+        song = make_song("Melt", "https://song.test/melt")
+        db_error = aiosqlite.OperationalError("database unavailable")
+
+        operations = [
+            (
+                controller.remove_song_from_custom_playlist(
+                    interaction,
+                    "Miku Mix",
+                    song.webpage_url,
+                ),
+                as_any(controller.db_logic).remove_song_from_playlist,
+                "Error occurred removing song from playlist, try again!",
+            ),
+            (
+                controller.delete_custom_playlist(
+                    interaction,
+                    "Miku Mix",
+                ),
+                as_any(controller.db_logic).delete_custom_playlist,
+                "Error occurred deleting playlist, try again!",
+            ),
+            (
+                controller.play_custom_playlist(
+                    interaction,
+                    "Miku Mix",
+                    as_any(object()),
+                ),
+                as_any(controller.db_logic).get_playlist_songs,
+                "Error occurred loading playlist, try again!",
+            ),
+        ]
+
+        for operation, db_method, expected_message in operations:
+            with self.subTest(expected_message):
+                db_method.side_effect = db_error
+                with patch.object(
+                    controller_module,
+                    "reply",
+                    new=AsyncMock(),
+                ) as reply_mock:
+                    result = await operation
+
+                self.assertEqual(reply_author(reply_mock), expected_message)
+                if expected_message.startswith("Error occurred loading"):
+                    self.assertEqual(result, [])
+                db_method.side_effect = None
 
 
 class EventLoopTests(unittest.IsolatedAsyncioTestCase):

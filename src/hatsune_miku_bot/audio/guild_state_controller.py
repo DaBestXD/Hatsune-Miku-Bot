@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Literal
 
+import aiosqlite
 from discord import (
     FFmpegPCMAudio,
     Interaction,
@@ -21,7 +22,10 @@ from hatsune_miku_bot.audio.audio_resolver import get_audio_source
 from hatsune_miku_bot.audio.playback_helpers import build_audio
 from hatsune_miku_bot.audio.song_cache import CachedSong, SongCache
 from hatsune_miku_bot.audio.song_playlist_classes import Playlist, Song
-from hatsune_miku_bot.db_logging.db_main import DBLogic
+from hatsune_miku_bot.db_logging.db_main import (
+    DBLogic,
+    PlaylistSongRemovalStatus,
+)
 from hatsune_miku_bot.monitoring.factory import DisabledMonitor, Monitor
 from hatsune_miku_bot.utils.discord_helpers import reply, text_only_embed
 
@@ -70,7 +74,7 @@ class GuildStateController:
 
     async def add_event[**P](
         self,
-        func: Callable[P, Coroutine[Any, Any, None]],
+        func: Callable[P, Coroutine[Any, Any, Any]],
         *args: P.args,
         **kwargs: P.kwargs,
     ) -> None:
@@ -664,6 +668,181 @@ class GuildStateController:
             interaction, f"Speed set to {effect_strength}"
         )
         return None
+
+    # TODO: add logging
+    async def create_custom_playlist(
+        self, interaction: Interaction, playlist_name: str
+    ) -> None:
+        try:
+            created = await self.db_logic.create_custom_playlist(
+                interaction, playlist_name
+            )
+            if created:
+                await reply(
+                    interaction,
+                    embed=text_only_embed(f"Created {playlist_name}!"),
+                )
+            else:
+                await reply(
+                    interaction,
+                    embed=text_only_embed(f"{playlist_name} already exists!"),
+                )
+        except aiosqlite.Error:
+            await reply(
+                interaction,
+                embed=text_only_embed(
+                    "Error occured doing playlist creation try again!"
+                ),
+            )
+
+    async def add_song_to_custom_playlist(
+        self,
+        interaction: Interaction,
+        playlist_name: str,
+        song: Song | Playlist,
+    ) -> None:
+        try:
+            added = await self.db_logic.add_song_to_playlist(
+                interaction,
+                playlist_name,
+                song,
+            )
+            if added:
+                await reply(
+                    interaction,
+                    embed=song.add_song_to_custom_playlist(
+                        playlist_name, added
+                    ),
+                )
+            else:
+                await reply(
+                    interaction,
+                    embed=song.add_song_to_custom_playlist(
+                        playlist_name, added
+                    ),
+                )
+        except aiosqlite.Error:
+            await reply(
+                interaction,
+                embed=text_only_embed(
+                    "Error occurred adding song to playlist, try again!"
+                ),
+            )
+
+    async def remove_song_from_custom_playlist(
+        self,
+        interaction: Interaction,
+        playlist_name: str,
+        song_identifier: str | None,
+    ) -> str | None:
+        try:
+            removal_result = await self.db_logic.remove_song_from_playlist(
+                interaction,
+                playlist_name,
+                song_identifier,
+            )
+            if (
+                removal_result.status is PlaylistSongRemovalStatus.REMOVED
+                and removal_result.title is not None
+            ):
+                removed_title = removal_result.title
+                await reply(
+                    interaction,
+                    embed=text_only_embed(
+                        f"Removed {removed_title} from {playlist_name}!"
+                    ),
+                )
+                return removed_title
+            if (
+                removal_result.status
+                is PlaylistSongRemovalStatus.AMBIGUOUS_TITLE
+            ):
+                await reply(
+                    interaction,
+                    embed=text_only_embed(
+                        f"Multiple songs named {song_identifier} were found in "
+                        f"{playlist_name}. Select an autocomplete option or "
+                        "enter the song URL."
+                    ),
+                )
+                return None
+            await reply(
+                interaction,
+                embed=text_only_embed(
+                    f"Song was not found in {playlist_name}!"
+                ),
+            )
+        except aiosqlite.Error:
+            await reply(
+                interaction,
+                embed=text_only_embed(
+                    "Error occurred removing song from playlist, try again!"
+                ),
+            )
+        return None
+
+    async def delete_custom_playlist(
+        self,
+        interaction: Interaction,
+        playlist_name: str,
+    ) -> None:
+        try:
+            deleted = await self.db_logic.delete_custom_playlist(
+                interaction,
+                playlist_name,
+            )
+            if deleted:
+                await reply(
+                    interaction,
+                    embed=text_only_embed(f"Deleted {playlist_name}!"),
+                )
+            else:
+                await reply(
+                    interaction,
+                    embed=text_only_embed(f"{playlist_name} was not found!"),
+                )
+        except aiosqlite.Error:
+            await reply(
+                interaction,
+                embed=text_only_embed(
+                    "Error occurred deleting playlist, try again!"
+                ),
+            )
+
+    async def play_custom_playlist(
+        self,
+        interaction: Interaction,
+        playlist_name: str,
+        vc: VoiceClient,
+    ) -> list[Song]:
+        try:
+            songs = await self.db_logic.get_playlist_songs(
+                interaction,
+                playlist_name,
+            )
+        except aiosqlite.Error:
+            await reply(
+                interaction,
+                embed=text_only_embed(
+                    "Error occurred loading playlist, try again!"
+                ),
+            )
+            return []
+
+        if not songs:
+            await reply(
+                interaction,
+                embed=text_only_embed(f"{playlist_name} is empty or missing!"),
+            )
+            return []
+        playlist = Playlist(
+            songs,
+            playlist_title=f"Custom Playlist: {playlist_name}",
+            playlist_thumbnail=songs[0].thumbnail_url,
+        )
+        await self.queue_songs(interaction, playlist, vc)
+        await self.add_event(self.begin_playback)
+        return songs
 
 
 @dataclass

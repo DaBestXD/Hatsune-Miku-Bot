@@ -75,6 +75,9 @@ class PlaybackHelperTests(unittest.IsolatedAsyncioTestCase):
 
 
 class DiscordHelperTests(unittest.IsolatedAsyncioTestCase):
+    def test_is_http_url_returns_false_for_malformed_url(self) -> None:
+        self.assertFalse(helpers._is_http_url("http://["))
+
     async def test_reply_uses_initial_response_or_followup(self) -> None:
         initial = SimpleNamespace(
             is_done=Mock(return_value=False),

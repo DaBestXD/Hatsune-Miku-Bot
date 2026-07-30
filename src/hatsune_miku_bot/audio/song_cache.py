@@ -11,7 +11,9 @@ class SongCache:
         self.cache: dict[str, CachedSong] = {}
         self._lock = asyncio.Lock()
 
-    async def get(self, cache_key: str) -> str | None:
+    async def get(self, cache_key: str | None) -> str | None:
+        if cache_key is None:
+            return None
         async with self._lock:
             cached_song = self.cache.get(cache_key)
             if cached_song and cached_song.expiry < time.time():
@@ -45,7 +47,11 @@ class SongCache:
                 )
                 return None
 
-    async def add_key(self, cached_song: str, source: CachedSong) -> None:
+    async def add_key(
+        self, cached_song: str | None, source: CachedSong
+    ) -> None:
+        if cached_song is None:
+            return None
         async with self._lock:
             logger.debug(
                 "Added %s to song cache",
@@ -57,7 +63,9 @@ class SongCache:
             )
             self.cache[cached_song] = source
 
-    async def delete_key(self, cache_key: str) -> None:
+    async def delete_key(self, cache_key: str | None) -> None:
+        if cache_key is None:
+            return None
         async with self._lock:
             key = self.cache.pop(cache_key, None)
             if not key:
