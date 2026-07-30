@@ -5,6 +5,39 @@
 User-facing changes and developer-facing internal changes are tracked together.
 Dates are listed without release versions for now.
 
+## 2026-07-30
+
+### Added
+
+- Added the server-specific `/custom-playlist` command group with commands to create and delete playlists, add songs or resolved playlists, remove songs, and queue a saved playlist for playback.
+- Added playlist-name autocomplete across custom-playlist commands and song autocomplete for removals.
+
+### Changed
+
+- Custom playlists now play songs in the order they were added and use a `Playlist` queue entry so Discord responses include the playlist name and song count.
+- Song removal now accepts either a selected song URL or a manually entered, case-insensitive song title and reports ambiguous duplicate titles instead of removing an arbitrary match.
+
+### Fixed
+
+- Prevented missing or malformed song, playlist, and thumbnail URLs from producing invalid Discord embeds or being treated as usable media links.
+
+### Internal
+
+- Added SQLite tables and query definitions for guild-scoped custom playlists and songs, including case-insensitive playlist names, URL-based duplicate rejection, foreign-key cascades, and insertion timestamps that preserve playlist order.
+- Added independent SQLite connections for write transactions with commit rollback behavior and cached playlist-name and playlist-song reads that are invalidated after successful mutations.
+- Added database reconstruction of persisted rows into `Song` objects and expanded command, controller, database, model, cache, and embed regression coverage for the custom-playlist workflow.
+
+## 2026-07-26
+
+### Added
+
+- Added cAdvisor to the Docker Compose observability stack and configured Prometheus to scrape container metrics every five seconds.
+- Added Grafana panels for cAdvisor health, bot-container CPU usage and throttling, memory working set and RSS, and out-of-memory events.
+
+### Fixed
+
+- Patched certain YouTube playlist links that previously returned no songs.
+
 ## 2026-07-25
 
 ### Added
@@ -20,7 +53,6 @@ Dates are listed without release versions for now.
 
 ### Fixed
 
-- Patched certain youtube playlist links from returning no songs
 - Fixed CI by installing the optional Prometheus dependencies before type checks and tests.
 - Fixed logging test teardown so queue listeners and file handlers no longer remain open, particularly on Windows.
 
