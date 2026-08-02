@@ -5,6 +5,12 @@
 User-facing changes and developer-facing internal changes are tracked together.
 Dates are listed without release versions for now.
 
+## 2026-08-02
+
+### Added
+
+- Added `/download-any` to download media from yt-dlp-supported links and upload files up to the 10 MB Discord file limit.
+
 ## 2026-07-30
 
 ### Added

@@ -6,11 +6,14 @@ import random
 import re
 import time
 from difflib import SequenceMatcher
+from io import BytesIO
 from itertools import islice
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, quote_plus, urlparse
 
 import aiohttp
+import discord
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, PagedList
 
@@ -851,3 +854,38 @@ def _get_audio_source_impl(query: Song) -> str | None:
 
 async def get_audio_source(query: Song) -> str | None:
     return await asyncio.to_thread(_get_audio_source_impl, query)
+
+
+def generic_download_logic(url: str, tmp_dir: str) -> discord.File:
+    options: _Params = {
+        "outtmpl": str(Path(tmp_dir) / "%(title)s.%(ext)s"),
+        "noplaylist": True,
+        "format": (
+            "bv*[height<=480][fps<=30]+ba[abr<=96]/"
+            "b[height<=480][fps<=30]/"
+            "ba[abr<=96]/"
+            "ba"
+        ),
+        "format_sort": [
+            "vcodec:av01",
+            "acodec:opus",
+            "res:480",
+            "fps:30",
+            "abr:96",
+        ],
+    }
+    try:
+        with YoutubeDL(options) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filepath = Path(ydl.prepare_filename(info))
+            if filepath.stat().st_size > 10_000_000:
+                raise ValueError
+            buffer = BytesIO(filepath.read_bytes())
+            return discord.File(
+                buffer,
+                filename=filepath.name,
+            )
+    except DownloadError:
+        # Re raise error as this isnt a real error that doesn't need
+        # to be logged
+        raise
