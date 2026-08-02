@@ -11,6 +11,8 @@ Dates are listed without release versions for now.
 
 - Added `/download-any` to download media from yt-dlp-supported links and upload files up to the 10 MB Discord file limit.
 
+- Added custom playlist logic to be used later
+
 ## 2026-07-30
 
 ### Added
