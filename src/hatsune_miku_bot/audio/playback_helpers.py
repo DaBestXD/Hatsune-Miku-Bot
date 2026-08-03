@@ -40,7 +40,7 @@ def build_audio(
 
 async def join_vc(
     interaction: Interaction, join: bool = True
-) -> None | VoiceProtocol:
+) -> VoiceProtocol | None:
     guild = interaction.guild
     user = interaction.user
     if not guild or isinstance(user, User):

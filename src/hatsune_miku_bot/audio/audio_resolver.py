@@ -4,20 +4,24 @@ import logging
 import os
 import random
 import re
+import shutil
+import tempfile
 import time
 from difflib import SequenceMatcher
 from io import BytesIO
 from itertools import islice
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qs, quote_plus, urlparse
 
 import aiohttp
 import discord
 from yt_dlp import YoutubeDL
+from yt_dlp.networking.impersonate import ImpersonateTarget
 from yt_dlp.utils import DownloadError, PagedList
 
 from hatsune_miku_bot.audio.song_playlist_classes import Playlist, Song
+from hatsune_miku_bot.bot_config.paths import PROJECT_ROOT
 from hatsune_miku_bot.logging.logging_setup import YTDLPLogger
 
 if TYPE_CHECKING:
@@ -26,7 +30,7 @@ else:
     _Params = dict[str, Any]
 
 logger = logging.getLogger(__name__)
-
+COOKE_FILE_PATH = PROJECT_ROOT / "cookies" / "instagram.txt"
 YT_DLP_LOGGER = YTDLPLogger()
 SP_PLAYLIST_SONG_METADATA = {
     "market": "US",
@@ -84,6 +88,9 @@ SOUNDCLOUD_AUDIO_PARAMS: _Params = {
     "quiet": True,
     "logger": YT_DLP_LOGGER,
 }
+
+PATTERN = re.compile(r"(?<!\S)(-|#|@)(?=\S)")
+P2 = re.compile(r"(?<=\S)\|(?=\S)")
 
 
 class AudioInfoResolver:
@@ -510,7 +517,7 @@ class AudioInfoResolver:
 
     def get_soundcloud_info(self, url: str) -> Song | None:
         if re.match(r"(.*sets+.*)(?:\?)", url):
-            logger.info(
+            logger.warning(
                 "SoundCloud playlists are not supported",
                 extra={
                     "event": "soundcloud_playlist_unsupported",
@@ -714,10 +721,8 @@ def rank_spotify_search_results(songs: list[Song], query: Song) -> Song:
 
 def _get_spotify_source_impl(query: Song) -> str | None:
     with YoutubeDL(SPOTIFY_SEARCH_PARAMS) as ydl:
-        pattern = re.compile(r"(?<!\S)(-|#|@)(?=\S)")
-        p2 = re.compile(r"(?<=\S)\|(?=\S)")
-        safe_title = pattern.sub("- ", query.title)
-        safe_title = p2.sub(" | ", safe_title)
+        safe_title = PATTERN.sub("- ", query.title)
+        safe_title = P2.sub(" | ", safe_title)
         safe_title = quote_plus(safe_title)
         result = ydl.extract_info(
             f"https://music.youtube.com/search?q={safe_title}#songs",
@@ -856,36 +861,51 @@ async def get_audio_source(query: Song) -> str | None:
     return await asyncio.to_thread(_get_audio_source_impl, query)
 
 
-def generic_download_logic(url: str, tmp_dir: str) -> discord.File:
-    options: _Params = {
-        "outtmpl": str(Path(tmp_dir) / "%(title)s.%(ext)s"),
-        "noplaylist": True,
-        "format": (
-            "bv*[height<=480][fps<=30]+ba[abr<=96]/"
-            "b[height<=480][fps<=30]/"
-            "ba[abr<=96]/"
-            "ba"
-        ),
-        "format_sort": [
-            "vcodec:av01",
-            "acodec:opus",
-            "res:480",
-            "fps:30",
-            "abr:96",
-        ],
-    }
-    try:
-        with YoutubeDL(options) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filepath = Path(ydl.prepare_filename(info))
-            if filepath.stat().st_size > 10_000_000:
-                raise ValueError
-            buffer = BytesIO(filepath.read_bytes())
-            return discord.File(
-                buffer,
-                filename=filepath.name,
+def generic_download_logic(
+    url: str, tmp_dir: str, audio_only: bool
+) -> discord.File:
+    with tempfile.NamedTemporaryFile() as temp_file:
+        shutil.copyfile(str(COOKE_FILE_PATH), temp_file.name)
+        options: _Params = {
+            "paths": {
+                "home": tmp_dir,
+            },
+            "outtmpl": "%(title)s.%(ext)s",
+            "noplaylist": True,
+            "impersonate": ImpersonateTarget.from_str("chrome"),
+            "cookiefile": temp_file.name,
+        }
+        if audio_only:
+            options["format"] = "ba[abr<=96]/ba"
+        else:
+            options["format"] = (
+                "bv*[height<=480][fps<=30]+ba[abr<=96]"
+                "/b[height<=480][fps<=30]"
+                "/bv*+ba/b"
             )
-    except DownloadError:
-        # Re raise error as this isnt a real error that doesn't need
-        # to be logged
-        raise
+            options["format_sort"] = [
+                "vcodec:av01",
+                "acodec:opus",
+                "res:480",
+                "fps:30",
+                "abr:96",
+            ]
+        try:
+            with YoutubeDL(options) as ydl:
+                info = ydl.extract_info(url, download=True)
+                downloads = info.get("requested_downloads")
+                if not downloads:
+                    raise DownloadError
+                cast(downloads, list[dict[str, str]])
+                filepath = Path(downloads[0]["filepath"])
+                if filepath.stat().st_size > 10 * 1024 * 1024:
+                    raise ValueError
+                buffer = BytesIO(filepath.read_bytes())
+                return discord.File(
+                    buffer,
+                    filename=filepath.name,
+                )
+        except DownloadError:
+            # Re raise error as this isnt a real error that doesn't need
+            # to be logged
+            raise

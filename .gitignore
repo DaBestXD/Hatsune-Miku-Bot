@@ -10,3 +10,4 @@ dist
 logs/
 .ruff_cache
 .pytest_cache
+cookies/*

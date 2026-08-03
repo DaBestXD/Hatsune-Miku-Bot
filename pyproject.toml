@@ -8,7 +8,7 @@ dependencies = [
     "aiosqlite",
     "discord.py[voice]",
     "python-dotenv",
-    "yt-dlp",
+    "yt-dlp[curl-cffi,default]",
     "yt-dlp-ejs",
 ]
 

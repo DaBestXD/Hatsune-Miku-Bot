@@ -56,8 +56,11 @@ class UtilityCommands(commands.Cog):
     @app_commands.command(
         name="download-any", description="easy to use yt_dlp downloader"
     )
+    @app_commands.describe(audio_only="Use for an audio only download")
     @app_commands.guild_only()
-    async def download_any(self, interaction: Interaction, url: str) -> None:
+    async def download_any(
+        self, interaction: Interaction, url: str, audio_only: bool = False
+    ) -> None:
         # WARNING: DANGEROUS COMMAND MAYBE ADD ROLE RESTRICTION LATER
         response = cast(InteractionResponse, interaction.response)
         if self.download_lock.locked():
@@ -71,9 +74,11 @@ class UtilityCommands(commands.Cog):
         await response.defer()
         try:
             async with self.download_lock:
-                with tempfile.TemporaryDirectory() as tmp_dir:
+                with tempfile.TemporaryDirectory(
+                    ignore_cleanup_errors=True
+                ) as tmp_dir:
                     file = await asyncio.to_thread(
-                        generic_download_logic, url, tmp_dir
+                        generic_download_logic, url, tmp_dir, audio_only
                     )
                     await reply(interaction, file=file)
         except ValueError:
