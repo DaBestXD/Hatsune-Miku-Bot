@@ -22,8 +22,8 @@ from hatsune_miku_bot.audio.guild_state_controller import (
 from hatsune_miku_bot.audio.playback_helpers import join_vc
 from hatsune_miku_bot.audio.queue_view import QueueEmbed, QueueView
 
-# Still needs some work don't load for now
-# from hatsune_miku_bot.cogs.custom_playlist import CustomPlaylistCommands
+# WARNING: unstable API for the db side of the custom playlist
+from hatsune_miku_bot.cogs.custom_playlist import CustomPlaylistCommands
 from hatsune_miku_bot.db_logging.db_main import DBLogic
 from hatsune_miku_bot.monitoring.factory import DisabledMonitor, Monitor
 from hatsune_miku_bot.utils.discord_helpers import (
@@ -36,7 +36,7 @@ from hatsune_miku_bot.utils.discord_helpers import (
 logger = logging.getLogger(__name__)
 
 
-class MikuMusicCommands(commands.Cog):
+class MikuMusicCommands(CustomPlaylistCommands, commands.Cog):
     """
     Stores all the music slash commands
     Cogname: musicplayer

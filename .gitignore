@@ -11,3 +11,4 @@ logs/
 .ruff_cache
 .pytest_cache
 cookies/*
+.mypy_cache

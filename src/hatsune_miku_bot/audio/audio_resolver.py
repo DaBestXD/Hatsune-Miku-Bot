@@ -30,7 +30,14 @@ else:
     _Params = dict[str, Any]
 
 logger = logging.getLogger(__name__)
-COOKE_FILE_PATH = PROJECT_ROOT / "cookies" / "instagram.txt"
+INSTAGRAM_COOKIE: Path | None = PROJECT_ROOT / "cookies" / "instagram.txt"
+YOUTUBE_COOKIE: Path | None = PROJECT_ROOT / "cookies" / "youtube.txt"
+if INSTAGRAM_COOKIE.resolve().exists():
+    logger.warning("No instagram cookie was passed")
+    INSTAGRAM_COOKIE = None
+if YOUTUBE_COOKIE.resolve().exists():
+    logger.warning("No youtube cookie was passed")
+    YOUTUBE_COOKIE = None
 YT_DLP_LOGGER = YTDLPLogger()
 SP_PLAYLIST_SONG_METADATA = {
     "market": "US",
@@ -51,6 +58,14 @@ SP_ALBUM_METADATA = {
 SP_ALBUM_LINK = "https://api.spotify.com/v1/albums/"
 SP_TRACK_LINK = "https://api.spotify.com/v1/tracks/"
 SP_PLAYLIST_LINK = "https://api.spotify.com/v1/playlists/"
+
+SHARED_YT_LOGIC: _Params = {
+    "quiet": True,
+    "logger": YT_DLP_LOGGER,
+}
+if YOUTUBE_COOKIE:
+    SHARED_YT_LOGIC["cookiefile"] = str(YOUTUBE_COOKIE)
+
 YOUTUBE_INFO_PARAMS: _Params = {
     "allowed_extractors": ["youtube", "youtube:tab", "end"],
     "js_runtimes": {"quickjs": {}},
@@ -865,7 +880,7 @@ def generic_download_logic(
     url: str, tmp_dir: str, audio_only: bool
 ) -> discord.File:
     with tempfile.NamedTemporaryFile() as temp_file:
-        shutil.copyfile(str(COOKE_FILE_PATH), temp_file.name)
+        shutil.copyfile(str(INSTAGRAM_COOKIE), temp_file.name)
         options: _Params = {
             "paths": {
                 "home": tmp_dir,
