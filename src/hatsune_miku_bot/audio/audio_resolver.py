@@ -32,7 +32,7 @@ else:
 logger = logging.getLogger(__name__)
 INSTAGRAM_COOKIE: Path | None = PROJECT_ROOT / "cookies" / "instagram.txt"
 YOUTUBE_COOKIE: Path | None = PROJECT_ROOT / "cookies" / "youtube.txt"
-if INSTAGRAM_COOKIE.resolve().exists():
+if not INSTAGRAM_COOKIE.resolve().exists():
     logger.warning("No instagram cookie was passed")
     INSTAGRAM_COOKIE = None
 if YOUTUBE_COOKIE.resolve().exists():
