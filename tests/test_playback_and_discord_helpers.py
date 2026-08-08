@@ -6,8 +6,6 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
-import discord
-
 import hatsune_miku_bot.audio.playback_helpers as playback
 import hatsune_miku_bot.utils.discord_helpers as helpers
 
@@ -109,7 +107,7 @@ class DiscordHelperTests(unittest.IsolatedAsyncioTestCase):
     def test_gen_bot_thumbnail_uses_packaged_asset(self) -> None:
         file_object = object()
         with patch.object(
-            discord, "File", return_value=file_object
+            helpers, "File", return_value=file_object
         ) as file_class:
             result = helpers.gen_bot_thumbnail()
 

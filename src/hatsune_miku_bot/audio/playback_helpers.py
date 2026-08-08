@@ -46,7 +46,7 @@ async def join_vc(
     if not guild or isinstance(user, User):
         await reply(
             interaction,
-            "Erm bot does not work in dms...How did you even add the bot to a dm 😹",  # noqa: E501
+            content="Erm bot does not work in dms...How did you even add the bot to a dm 😹",  # noqa: E501
         )
         return None
     # guild voice client checks if bot is already in voice chat
