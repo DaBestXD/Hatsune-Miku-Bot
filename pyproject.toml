@@ -5,28 +5,27 @@ description = "Self-hosted Discord music bot built with discord.py, yt-dlp, and 
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "aiosqlite",
-    "discord.py[voice]",
-    "python-dotenv",
-    "yt-dlp[curl-cffi,default]",
-    "yt-dlp-ejs",
+  "aiosqlite",
+  "discord.py[voice]",
+  "python-dotenv",
+  "yt-dlp[curl-cffi,default]",
+  "yt-dlp-ejs",
 ]
 
 [project.scripts]
 hatsune-miku-bot = "hatsune_miku_bot.__main__:run"
 
 [project.optional-dependencies]
-prometheus = [
-    "prometheus-client>=0.25.0",
-]
+prometheus = ["prometheus-client>=0.25.0"]
 
 [dependency-groups]
 dev = [
-    "pytest",
-    "ruff>=0.15.22",
-    "tool>=0.8.0",
-    "ty>=0.0.62",
-    "types-yt-dlp>=2026.3.17.20260605",
+  "pyright>=1.1.411",
+  "pytest",
+  "ruff>=0.15.22",
+  "tool>=0.8.0",
+  "ty>=0.0.69",
+  "types-yt-dlp>=2026.3.17.20260605",
 ]
 
 [build-system]
