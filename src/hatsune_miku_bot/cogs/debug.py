@@ -42,10 +42,12 @@ class BotDebugger(commands.Cog):
 
     @reload_cog.autocomplete("cog_name")
     async def cog_ext_name_autocomplete(
-        self, interaction: Interaction, current: str
+        self, _interaction: Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
         return [
-            app_commands.Choice(name=s, value=s) for s in self.bot.extensions
+            app_commands.Choice(name=s, value=s)
+            for s in self.bot.extensions
+            if current.lower() in s.lower()
         ]
 
     def return_commands_embed(self, cog: commands.Cog) -> discord.Embed:

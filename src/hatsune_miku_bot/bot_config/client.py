@@ -187,7 +187,9 @@ class Bot(commands.Bot):
         if isinstance(error, CheckFailure):
             await reply(
                 interaction,
-                "Invalid permission: Must be owner of the bot!",
+                embed=text_only_embed(
+                    "Invalid permission: Must be owner of the bot!"
+                ),
                 ephemeral=True,
             )
         else:
