@@ -1,9 +1,8 @@
 import asyncio
 import tempfile
-from typing import cast
 
 import discord
-from discord import Interaction, InteractionResponse, app_commands
+from discord import Interaction, app_commands
 from discord.ext import commands
 from yt_dlp.utils import DownloadError
 
@@ -62,7 +61,6 @@ class UtilityCommands(commands.Cog):
         self, interaction: Interaction, url: str, audio_only: bool = False
     ) -> None:
         # WARNING: DANGEROUS COMMAND MAYBE ADD ROLE RESTRICTION LATER
-        response = cast(InteractionResponse, interaction.response)
         if self.download_lock.locked():
             await reply(
                 interaction,
@@ -71,7 +69,7 @@ class UtilityCommands(commands.Cog):
                 ),
             )
             return None
-        await response.defer()
+        await interaction.response.defer()
         try:
             async with self.download_lock:
                 with tempfile.TemporaryDirectory(
