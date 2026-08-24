@@ -44,6 +44,10 @@ class Song:
             self.formatted_duration = "0"
         self.view_count: str = view_count
 
+    def safe_title(self, max_length: int = 50) -> str:
+        truncate = "..." if len(self.title) > max_length else ""
+        return self.title[:max_length] + truncate
+
     @classmethod
     def from_spotify(
         cls,

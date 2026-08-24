@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import logging
 from typing import override
 
@@ -15,12 +16,17 @@ from discord import (
 )
 from discord.ext import commands
 
+import hatsune_miku_bot.audio.queue_layout_view
 from hatsune_miku_bot.audio.audio_resolver import AudioInfoResolver
 from hatsune_miku_bot.audio.guild_state_controller import (
     GuildStateController,
 )
 from hatsune_miku_bot.audio.playback_helpers import join_vc
+from hatsune_miku_bot.audio.queue_layout_view import QueueLayoutView
 from hatsune_miku_bot.audio.queue_view import QueueEmbed, QueueView
+
+# WARNING: REMOVE LATER
+from hatsune_miku_bot.bot_config.constants import GUILD_OBJECT
 
 # WARNING: unstable API for the db side of the custom playlist
 from hatsune_miku_bot.cogs.custom_playlist import CustomPlaylistCommands
@@ -33,6 +39,8 @@ from hatsune_miku_bot.utils.discord_helpers import (
     text_only_embed,
 )
 
+# WARNING: REMOVE LATER
+assert GUILD_OBJECT
 logger = logging.getLogger(__name__)
 
 
@@ -61,6 +69,7 @@ class MikuMusicCommands(CustomPlaylistCommands, commands.Cog):
         """
         Cog loading and unloading would only be caused by debugging commands
         """
+        importlib.reload(hatsune_miku_bot.audio.queue_layout_view)
         if not self.audio_session:
             logger.debug(
                 "Creating audio HTTP session",
@@ -524,3 +533,11 @@ class MikuMusicCommands(CustomPlaylistCommands, commands.Cog):
         embed = code_block_embed(_str_songs, "Most songs played")
         await reply(interaction, embed=embed)
         return None
+
+    @app_commands.command(name="new_layout")
+    @app_commands.guilds(GUILD_OBJECT)
+    async def test_queue_view(self, interaction: Interaction):
+        assert interaction.guild_id
+        queue_view = QueueLayoutView(self, interaction.guild_id)
+        await reply(interaction, view=queue_view, file=gen_bot_thumbnail())
+        queue_view.message = await interaction.original_response()

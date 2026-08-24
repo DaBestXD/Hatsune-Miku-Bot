@@ -116,6 +116,7 @@ class Bot(commands.Bot):
             else:
                 await self.load_extension("hatsune_miku_bot.cogs.debug")
         await self.load_extension("hatsune_miku_bot.cogs.utility")
+        # await self.load_extension("hatsune_miku_bot.cogs._test")
         await self.add_cog(MikuMusicCommands(self, self.db_logic, self.monitor))
         for ext in self.extensions:
             logger.info(

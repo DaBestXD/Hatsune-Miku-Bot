@@ -170,7 +170,7 @@ class QueueView(ui.View):
         return None
 
     @discord.ui.button(
-        emoji="<:WAPPLE:883418567654117426>",
+        emoji="🍎",
         style=discord.ButtonStyle.danger,
         disabled=False,
     )
