@@ -247,16 +247,38 @@ class MikuMusicCommands(CustomPlaylistCommands, commands.Cog):
         return None
 
     @app_commands.command(
+        name="play-next", description="Queue a song to be played next"
+    )
+    @app_commands.describe(
+        query="Currently does not support soundcloud playlists"
+    )
+    @app_commands.guild_only()
+    async def play_next(self, interaction: Interaction, query: str) -> None:
+        """
+        Usage /play-next [query]
+        """
+        await self._play(interaction, query, play_next=True)
+
+    @app_commands.command(
         name="play", description="Enter song name or song url"
     )
     @app_commands.describe(
         query="Currently does not support soundcloud playlists"
     )
     @app_commands.guild_only()
-    async def play(self, interaction: Interaction, query: str):
+    async def play(self, interaction: Interaction, query: str) -> None:
         """
         Usage /play [query]
         """
+        await self._play(interaction, query)
+
+    async def _play(
+        self,
+        interaction: Interaction,
+        query: str,
+        *,
+        play_next: bool = False,
+    ) -> None:
         await interaction.response.defer()
         if not (guild_id := interaction.guild_id):
             return None
@@ -287,7 +309,16 @@ class MikuMusicCommands(CustomPlaylistCommands, commands.Cog):
             )
             return None
         gp_con = self.guildstate_con_dict[guild_id]
-        await gp_con.add_event(gp_con.queue_songs, interaction, result, vc)
+        if play_next:
+            await gp_con.add_event(
+                gp_con.queue_songs,
+                interaction,
+                result,
+                vc,
+                play_next=True,
+            )
+        else:
+            await gp_con.add_event(gp_con.queue_songs, interaction, result, vc)
         await gp_con.add_event(gp_con.begin_playback)
         return None
 

@@ -263,6 +263,57 @@ class MusicCogTests(unittest.IsolatedAsyncioTestCase):
         )
         controller.add_event.assert_any_await(controller.begin_playback)
 
+    async def test_play_next_queues_resolved_song_before_existing_queue(
+        self,
+    ) -> None:
+        class FakeTextChannel:
+            pass
+
+        class FakeVoiceClient:
+            pass
+
+        song = object()
+        vc = FakeVoiceClient()
+        interaction = SimpleNamespace(
+            guild_id=42,
+            channel=FakeTextChannel(),
+            response=SimpleNamespace(defer=AsyncMock()),
+        )
+        resolver = SimpleNamespace(get_song_info=AsyncMock(return_value=song))
+        controller = SimpleNamespace(
+            queue_songs=AsyncMock(),
+            begin_playback=AsyncMock(),
+            add_event=AsyncMock(),
+        )
+        cog = music_module.MikuMusicCommands(
+            as_any(SimpleNamespace()), as_any(AsyncMock())
+        )
+        cog.audio_info_resolver = as_any(resolver)
+        cog.guildstate_con_dict[42] = as_any(controller)
+
+        with (
+            patch.object(music_module, "TextChannel", FakeTextChannel),
+            patch.object(music_module, "VoiceClient", FakeVoiceClient),
+            patch.object(
+                music_module, "join_vc", new=AsyncMock(return_value=vc)
+            ),
+        ):
+            await as_any(music_module.MikuMusicCommands.play_next.callback)(
+                cog, interaction, "world is mine"
+            )
+
+        interaction.response.defer.assert_awaited_once_with()
+        resolver.get_song_info.assert_awaited_once_with("world is mine")
+        self.assertEqual(controller.add_event.await_count, 2)
+        controller.add_event.assert_any_await(
+            controller.queue_songs,
+            interaction,
+            song,
+            vc,
+            play_next=True,
+        )
+        controller.add_event.assert_any_await(controller.begin_playback)
+
     async def test_song_tracker_replies_when_no_songs_have_played(
         self,
     ) -> None:

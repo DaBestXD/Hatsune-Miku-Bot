@@ -552,6 +552,47 @@ class CacheAndQueueTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply_mock.await_count, 2)
         self.assertEqual(controller.queue.qsize(), 2)
 
+    async def test_queue_songs_can_insert_song_and_playlist_next(self) -> None:
+        controller = make_controller()
+        channel = FakeTextChannel()
+        interaction = as_any(SimpleNamespace(channel=channel))
+        vc = as_any(SimpleNamespace())
+        current = make_song("Current", "https://song.test/current")
+        queued = make_song("Queued", "https://song.test/queued")
+        next_song = make_song("Next", "https://song.test/next")
+        playlist_first = make_song("First", "https://song.test/first")
+        playlist_second = make_song("Second", "https://song.test/second")
+        controller.state.songs = [current, queued]
+
+        with (
+            patch.object(controller_module, "TextChannel", FakeTextChannel),
+            patch.object(controller_module, "reply", new=AsyncMock()),
+        ):
+            await controller.queue_songs(
+                interaction, next_song, vc, play_next=True
+            )
+            await controller.queue_songs(
+                interaction,
+                Playlist(
+                    [playlist_first, playlist_second],
+                    playlist_title="List",
+                ),
+                vc,
+                play_next=True,
+            )
+
+        self.assertEqual(
+            controller.state.songs,
+            [
+                current,
+                playlist_first,
+                playlist_second,
+                next_song,
+                queued,
+            ],
+        )
+        self.assertEqual(controller.queue.qsize(), 2)
+
 
 class PlaybackTests(unittest.IsolatedAsyncioTestCase):
     async def test_begin_playback_uses_cache_and_starts_voice_client(

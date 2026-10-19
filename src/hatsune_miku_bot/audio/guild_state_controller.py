@@ -191,6 +191,8 @@ class GuildStateController:
         interaction: Interaction,
         item_to_add: Song | Playlist,
         vc: VoiceClient,
+        *,
+        play_next: bool = False,
     ) -> None:
         self.state.vc = vc
         if isinstance(interaction.channel, TextChannel):
@@ -198,10 +200,16 @@ class GuildStateController:
         else:
             self.state.text_channel = None
         if isinstance(item_to_add, Playlist):
-            self.state.songs.extend(item_to_add.songs)
+            if play_next:
+                self.state.songs[1:1] = item_to_add.songs
+            else:
+                self.state.songs.extend(item_to_add.songs)
             await reply(interaction, embed=item_to_add.return_embed())
         else:
-            self.state.songs.append(item_to_add)
+            if play_next:
+                self.state.songs.insert(1, item_to_add)
+            else:
+                self.state.songs.append(item_to_add)
             await reply(
                 interaction,
                 embed=item_to_add.return_embed(
