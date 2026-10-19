@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Any, Never, Required, TypedDict, Unpack, overload
+from collections.abc import Callable, Sequence
+from typing import (
+    TypedDict,
+    Unpack,
+)
 from urllib.parse import urlparse
 
 from discord import (
@@ -16,32 +19,19 @@ from discord import (
     WebhookMessage,
     app_commands,
 )
-from discord.ui import LayoutView, View
+from discord.ui import View
 
 from hatsune_miku_bot.bot_config.constants import USER_ID
 from hatsune_miku_bot.bot_config.paths import ASSET_DIR
 
 
-class _BaseReply(TypedDict, total=False):
+class ReplyKwargs(TypedDict, total=False):
     allowed_mentions: AllowedMentions
     file: File
     files: Sequence[File]
     ephemeral: bool
     silent: bool
     suppress_embeds: bool
-
-
-class _LayoutReply(_BaseReply, total=False):
-    view: Required[LayoutView]
-    embed: Never
-    embeds: Never
-    stickers: Never
-    poll: Never
-    tts: Never
-    content: Never
-
-
-class _NormalReply(_BaseReply, total=False):
     view: View
     tts: bool
     embed: Embed
@@ -49,25 +39,10 @@ class _NormalReply(_BaseReply, total=False):
     poll: Poll
 
 
-@overload
-async def reply(
-    interaction: Interaction,
-    **kwargs: Unpack[_LayoutReply],
-) -> WebhookMessage | InteractionCallbackResponse | None: ...
-
-
-@overload
-async def reply(
-    interaction: Interaction,
-    content: str = "",
-    **kwargs: Unpack[_NormalReply],
-) -> WebhookMessage | InteractionCallbackResponse | None: ...
-
-
 async def reply(
     interaction: Interaction,
     content: str | None = None,
-    **kwargs: Any,
+    **kwargs: Unpack[ReplyKwargs],
 ) -> WebhookMessage | InteractionCallbackResponse | None:
     try:
         if interaction.response.is_done():
@@ -81,7 +56,7 @@ async def reply(
         return None
 
 
-def owner_command():
+def owner_command[T]() -> Callable[[T], T]:
     async def predicate(interaction: Interaction) -> bool:
         return interaction.user.id == USER_ID
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import time
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any, Self, override
+from typing import TYPE_CHECKING, Any, Self, cast, override
 
 import discord
 
@@ -67,7 +67,9 @@ class Song:
             if not _thumbnails:
                 album_thumbnail = None
             else:
-                album_thumbnail = json_reponse["album"]["images"][0]["url"]
+                album_thumbnail = cast(
+                    str, json_reponse["album"]["images"][0]["url"]
+                )
             duration = json_reponse["duration_ms"] // 1000
         title = song_name + " - " + artist
         return cls(title, spotify_url, album_thumbnail, duration, "0")

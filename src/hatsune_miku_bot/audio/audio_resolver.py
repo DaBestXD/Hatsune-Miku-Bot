@@ -132,7 +132,7 @@ class AudioInfoResolver:
                 return None
             page_items = page["items"]
             items.extend(item for item in page_items if isinstance(item, dict))
-            next_value = page["next"]
+            next_value = cast(str, page["next"])
             next_link = next_value
             next_params = {}
         if not items:

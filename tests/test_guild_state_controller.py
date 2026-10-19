@@ -59,7 +59,9 @@ def reply_author(reply_mock: AsyncMock) -> str:
     reply_call = reply_mock.await_args
     assert reply_call is not None
     embed = as_any(reply_call.kwargs["embed"])
-    return embed.author.name
+    author_name = embed.author.name
+    assert isinstance(author_name, str)
+    return author_name
 
 
 class CustomPlaylistTests(unittest.IsolatedAsyncioTestCase):

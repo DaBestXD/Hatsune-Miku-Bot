@@ -539,5 +539,7 @@ class MikuMusicCommands(CustomPlaylistCommands, commands.Cog):
     async def test_queue_view(self, interaction: Interaction):
         assert interaction.guild_id
         queue_view = QueueLayoutView(self, interaction.guild_id)
-        await reply(interaction, view=queue_view, file=gen_bot_thumbnail())
+        await interaction.response.send_message(
+            view=queue_view, file=gen_bot_thumbnail()
+        )
         queue_view.message = await interaction.original_response()

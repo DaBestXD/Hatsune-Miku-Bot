@@ -44,6 +44,7 @@ class MainCustomPlaylistLV(LayoutView):
         self.add_item(self.main_container)
         self.message: InteractionMessage | None = None
 
+    @override
     async def on_timeout(self) -> None:
         self.main_container.header_text.content = (
             "# Playlist Controller expired!"
@@ -190,7 +191,9 @@ class Test_cog(commands.Cog):
         # names = await self.return_playlist_names(interaction)
         names = [f"Playlist {i}" for i in range(100)]
         custom_view = MainCustomPlaylistLV(names)
-        await reply(interaction, view=custom_view, file=gen_bot_thumbnail())
+        await interaction.response.send_message(
+            view=custom_view, file=gen_bot_thumbnail()
+        )
         custom_view.message = await interaction.original_response()
 
 
